@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  box-sizing: border-box;
+}
+
+html, body {
+  overflow-x: hidden;
+  height: 100%;
+}
+
+body {
+  background-color: #C4AE99;
+  font-family: 'Inter', sans-serif;
+}
+
+#root {
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  background: #C4AE99;
+}
+
+/* ─── Card entry animation ───────────────────────────────────────────────────── */
+@keyframes cardFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.swipe-card-enter {
+  animation: cardFadeIn 0.22s ease-out both;
+}
