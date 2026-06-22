@@ -12,11 +12,18 @@ declare global {
         close(): void;
         colorScheme: 'light' | 'dark';
         themeParams: Record<string, string>;
+        openTelegramLink(url: string): void;
         MainButton: {
           show(): void;
           hide(): void;
           setText(text: string): void;
           onClick(fn: () => void): void;
+        };
+        CloudStorage: {
+          setItem(key: string, value: string, callback?: (err: unknown) => void): void;
+          getItem(key: string, callback: (err: unknown, value: string | undefined) => void): void;
+          getItems(keys: string[], callback: (err: unknown, values: Record<string, string>) => void): void;
+          getKeys(callback: (err: unknown, keys: string[]) => void): void;
         };
       };
     };

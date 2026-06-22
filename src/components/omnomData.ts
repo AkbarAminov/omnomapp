@@ -1,131 +1,117 @@
 export type CuisineOption = {
   id: string;
   title: string;
+  title_uz: string;
   description: string;
+  description_uz: string;
   emoji: string;
 };
 
 export type Question = {
   id: string;
   title: string;
+  title_uz: string;
   subtitle: string;
-  emoji: string;   // shown as fallback when image fails to load
-  image: string;   // drop PNGs into src/assets/ to activate
-};
-
-export type DishResult = {
-  id: string;
-  name: string;
-  description: string;
-  matchPercent: number;
+  subtitle_uz: string;
   emoji: string;
-  color: string;
+  image: string;
 };
-
-export type Answer = 'yes' | 'no' | 'any';
 
 export const cuisineOptions: CuisineOption[] = [
   {
     id: 'asian',
     title: 'Азиатская',
+    title_uz: 'Osiyo oshxonasi',
     description: 'Суши, вок, рамен, рис и др.',
+    description_uz: 'Sushi, wok, ramen, guruch va boshq.',
     emoji: '🍣',
   },
   {
     id: 'european',
     title: 'Европейская',
+    title_uz: 'Yevropa oshxonasi',
     description: 'Паста, стейк, салаты, супы и др.',
+    description_uz: "Pasta, biftek, salatlar, sho'rvalar va boshq.",
     emoji: '🍝',
   },
   {
     id: 'central-asia',
     title: 'Среднеазиатская',
+    title_uz: "O'rta Osiyo oshxonasi",
     description: 'Плов, лагман, манты, самса и др.',
+    description_uz: "Osh, lag'mon, manti, samsa va boshq.",
     emoji: '🥟',
   },
   {
     id: 'middle-east',
     title: 'Ближневосточная',
+    title_uz: 'Yaqin Sharq oshxonasi',
     description: 'Донер, кебаб, хумус, фалафель и др.',
+    description_uz: 'Doner, kebab, hummus, falafel va boshq.',
     emoji: '🌯',
   },
   {
     id: 'slavic',
     title: 'Славянская',
+    title_uz: 'Slavyan oshxonasi',
     description: 'Борщ, вареники, пельмени, драники и др.',
+    description_uz: 'Borsh, vareniki, pelmeni, draniki va boshq.',
     emoji: '🥣',
   },
   {
     id: 'fast-food',
     title: 'Фастфуд',
+    title_uz: 'Tez ovqat',
     description: 'Бургер, шаурма, хот-дог, фри и др.',
+    description_uz: 'Burger, shaurma, hot-dog, fri va boshq.',
     emoji: '🍔',
   },
 ];
 
-// Drop the real PNG illustrations into src/assets/ — filenames must match these paths.
-// Until then the emoji fallback is shown automatically via onError in QuestionImage.
 export const questions: Question[] = [
   {
     id: 'full-meal',
     title: 'Плотно поесть?',
+    title_uz: "To'q yemoqchimisiz?",
     subtitle: 'Типо плова, бургера или просто перекус?',
+    subtitle_uz: 'Masalan osh, burger yoki shunchaki gazak?',
     emoji: '🥩',
     image: '/src/assets/char-meal.png',
   },
   {
     id: 'with-meat',
     title: 'С мясом?',
+    title_uz: "Go'shtli bo'lsinmi?",
     subtitle: 'Курица, говядина… или без мяса тоже норм?',
+    subtitle_uz: "Tovuq, mol go'shti… yoki go'shtsiz ham bo'ladimi?",
     emoji: '🍗',
     image: '/src/assets/char-meat.png',
   },
   {
     id: 'hot-food',
     title: 'Горячее?',
+    title_uz: 'Issiqmi?',
     subtitle: 'Что-то горячее или можно холодное?',
+    subtitle_uz: 'Issiq taom yoki sovuq ham mayli?',
     emoji: '☕',
     image: '/src/assets/char-hot.png',
   },
   {
     id: 'maybe-soup',
     title: 'Может суп?',
+    title_uz: "Balki sho'rva?",
     subtitle: 'Лёгкое первое или вообще не хочется жидкого?',
+    subtitle_uz: "Engil birinchi taom yoki suyuq narsa kerak emas?",
     emoji: '🍲',
     image: '/src/assets/char-soup.png',
   },
   {
     id: 'need-fast',
     title: 'Нужно быстро?',
+    title_uz: 'Tez kerakmi?',
     subtitle: 'Есть время перекусить или планируешь свой обед',
+    subtitle_uz: 'Gazak uchun vaqtingiz bormi yoki tushlik rejalashtirmoqdasiz?',
     emoji: '⚡',
     image: '/src/assets/char-fast.png',
-  },
-];
-
-export const mockResults: DishResult[] = [
-  {
-    id: 'lagman',
-    name: 'Лагман «Уйгурский»',
-    description: 'Наваристый бульон, ручная лапша',
-    matchPercent: 80,
-    emoji: '🍜',
-    color: '#FFE5C0',
-  },
-  {
-    id: 'manti',
-    name: 'Манты с зеленью',
-    description: 'Лёгкий вариант для обеда',
-    matchPercent: 55,
-    emoji: '🥟',
-    color: '#E8F5E9',
-  },
-  {
-    id: 'achichuk',
-    name: 'Салат Ачичук',
-    description: 'Классика к основному блюду',
-    matchPercent: 25,
-    emoji: '🥗',
-    color: '#FFE0E0',
   },
 ];
