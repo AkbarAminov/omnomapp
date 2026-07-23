@@ -1,38 +1,43 @@
-function getCS() {
-  return window.Telegram?.WebApp?.CloudStorage;
-}
+import { supabase } from '../lib/supabase';
+import { getUserId } from '../lib/userId';
 
-// ── Diet restrictions ─────────────────────────────────────────────────────────
+type Settings = { lang: string; allergens: string[] };
 
-const DIET_KEY = 'omnom_diet';
+let settingsPromise: Promise<Settings> | null = null;
 
-export function saveDiet(restrictions: string[]): void {
-  try { getCS()?.setItem(DIET_KEY, JSON.stringify(restrictions)); } catch {}
-}
-
-export function loadDiet(onLoad: (items: string[]) => void): void {
-  const cs = getCS();
-  if (!cs) { onLoad([]); return; }
+async function fetchSettings(): Promise<Settings> {
   try {
-    cs.getItem(DIET_KEY, (_err, value) => {
-      if (!value) { onLoad([]); return; }
-      try { onLoad(JSON.parse(value) as string[]); } catch { onLoad([]); }
-    });
-  } catch { onLoad([]); }
+    const { data } = await supabase
+      .from('user_settings')
+      .select('lang, allergens')
+      .eq('user_id', getUserId())
+      .maybeSingle();
+    return { lang: data?.lang ?? 'ru', allergens: (data?.allergens as string[]) ?? [] };
+  } catch {
+    return { lang: 'ru', allergens: [] };
+  }
 }
 
-// ── Language ──────────────────────────────────────────────────────────────────
+export function loadSettings(): Promise<Settings> {
+  if (!settingsPromise) settingsPromise = fetchSettings();
+  return settingsPromise;
+}
 
-const LANG_KEY = 'omnom_lang';
+export async function saveSettings(lang: string, allergens: string[]): Promise<void> {
+  settingsPromise = Promise.resolve({ lang, allergens });
+  try {
+    await supabase.from('user_settings').upsert(
+      { user_id: getUserId(), lang, allergens, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    );
+  } catch {}
+}
 
-export function saveLanguage(lang: string): void {
-  try { getCS()?.setItem(LANG_KEY, lang); } catch {}
+// Callback-based wrappers for components that load settings on mount
+export function loadDiet(onLoad: (items: string[]) => void): void {
+  loadSettings().then(({ allergens }) => onLoad(allergens)).catch(() => onLoad([]));
 }
 
 export function loadLanguage(onLoad: (lang: string) => void): void {
-  const cs = getCS();
-  if (!cs) { onLoad('ru'); return; }
-  try {
-    cs.getItem(LANG_KEY, (_err, value) => { onLoad(value ?? 'ru'); });
-  } catch { onLoad('ru'); }
+  loadSettings().then(({ lang }) => onLoad(lang)).catch(() => onLoad('ru'));
 }

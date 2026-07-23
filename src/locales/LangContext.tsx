@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Lang, TranslationKey, translations } from './translations';
-import { loadLanguage, saveLanguage } from '../logic/settingsStorage';
+import { loadSettings } from '../logic/settingsStorage';
 
 type LangContextValue = {
   lang: Lang;
@@ -18,14 +18,14 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>('ru');
 
   useEffect(() => {
-    loadLanguage((l) => {
+    loadSettings().then(({ lang: l }) => {
       if (l === 'uz' || l === 'ru') setLangState(l as Lang);
     });
   }, []);
 
+  // Updates UI immediately; persistence happens on "Применить" in ProfileScreen
   const setLang = (l: Lang) => {
     setLangState(l);
-    saveLanguage(l);
   };
 
   const t = (key: TranslationKey): string =>

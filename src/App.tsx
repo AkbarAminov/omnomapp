@@ -13,14 +13,64 @@ import {
   StartScreen,
 } from './components/OmNomComponents';
 import { questions } from './components/omnomData';
-import { getRandomDish, matchDishes, MatchedDish } from './logic/matchDishes';
-import { HistoryItem, loadHistory, saveHistory } from './logic/historyStorage';
+import { getRandomDish, loadDishes, matchDishes, MatchedDish } from './logic/matchDishes';
+import { HistoryItem, loadHistory, saveHistoryItem } from './logic/historyStorage';
 import { loadDiet } from './logic/settingsStorage';
 import { LangProvider } from './locales/LangContext';
 
 export type FlowScreen = 'start' | 'cuisine' | 'question' | 'loading' | 'single-result' | 'results' | 'no-results';
 export type TabScreen = 'home' | 'history' | 'map' | 'profile';
 type Answer = 'yes' | 'no' | 'any';
+
+function AppLoadingScreen() {
+  return (
+    <div style={{
+      width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF1DC', gap: '20px',
+    }}>
+      <img src="/src/assets/logo_vertical.svg" alt="OmNom" style={{ width: '120px' }}
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+      <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', opacity: 0.6, fontSize: '15px' }}>
+        Загружаем меню…
+      </p>
+    </div>
+  );
+}
+
+function AppErrorScreen({ onRetry }: { onRetry(): void }) {
+  return (
+    <div style={{
+      width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF1DC',
+      gap: '16px', padding: '24px', boxSizing: 'border-box',
+    }}>
+      <span style={{ fontSize: '52px' }}>😔</span>
+      <p style={{
+        fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912',
+        fontSize: '20px', textAlign: 'center', margin: 0, letterSpacing: '-0.02em',
+      }}>
+        Не удалось загрузить
+      </p>
+      <p style={{
+        fontFamily: 'Inter, sans-serif', fontWeight: 400, color: '#6C2912', opacity: 0.6,
+        fontSize: '14px', textAlign: 'center', margin: 0, lineHeight: 1.5,
+      }}>
+        Проверьте соединение и попробуйте снова
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        style={{
+          marginTop: '8px', padding: '0 36px', height: '52px', borderRadius: '100px',
+          backgroundColor: '#F48924', border: 'none', cursor: 'pointer',
+          fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#fff', fontSize: '16px',
+        }}
+      >
+        Повторить
+      </button>
+    </div>
+  );
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabScreen>('home');
@@ -34,6 +84,9 @@ export default function App() {
   const [, setDiet] = useState<string[]>([]);
   const [profileInSubPage, setProfileInSubPage] = useState(false);
 
+  const [dishesLoading, setDishesLoading] = useState(true);
+  const [dishesError, setDishesError] = useState(false);
+
   const loadingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentIdsRef = useRef<string[]>([]);
 
@@ -43,7 +96,23 @@ export default function App() {
 
   useEffect(() => () => clearTimer(), []);
 
-  useEffect(() => { loadHistory((items) => setHistory(items)); }, []);
+  const initApp = useCallback(async () => {
+    setDishesLoading(true);
+    setDishesError(false);
+    try {
+      const [historyItems] = await Promise.all([
+        loadHistory(),
+        loadDishes(),
+      ]);
+      setHistory(historyItems);
+      setDishesLoading(false);
+    } catch {
+      setDishesError(true);
+      setDishesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { initApp(); }, [initApp]);
   useEffect(() => { loadDiet((items) => setDiet(items)); }, []);
 
   const addToHistory = (dish: MatchedDish) => {
@@ -59,11 +128,8 @@ export default function App() {
       matchPercent: dish.matchPercent,
       date,
     };
-    setHistory((prev) => {
-      const next = [item, ...prev].slice(0, 50);
-      saveHistory(next);
-      return next;
-    });
+    setHistory((prev) => [item, ...prev].slice(0, 50));
+    saveHistoryItem(dish);
   };
 
   const resetState = () => {
@@ -110,6 +176,7 @@ export default function App() {
   const handleRandomizer = () => {
     resetState();
     const randomDish = getRandomDish(recentIdsRef.current);
+    if (!randomDish) return;
     recentIdsRef.current = [randomDish.id, ...recentIdsRef.current].slice(0, 6);
     setResults([randomDish]);
     addToHistory(randomDish);
@@ -158,6 +225,9 @@ export default function App() {
   const handleRetry = () => { resetState(); setFlowScreen('cuisine'); };
   const handleNearby = () => { setActiveTab('map'); };
   const handleAllResults = () => setFlowScreen('results');
+
+  if (dishesLoading) return <AppLoadingScreen />;
+  if (dishesError) return <AppErrorScreen onRetry={initApp} />;
 
   const currentQuestion = questions[questionIndex];
   const nextQuestion = questions[questionIndex + 1] ?? null;

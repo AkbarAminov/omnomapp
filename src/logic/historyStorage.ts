@@ -1,36 +1,60 @@
+import { supabase } from '../lib/supabase';
+import { getUserId } from '../lib/userId';
+import type { MatchedDish } from './matchDishes';
+
 export type HistoryItem = {
   id: string;
   name: string;
   name_uz?: string;
-  image: string;       // filename only, e.g. "plov.jpg"
+  image: string;
   emoji: string;
   matchPercent: number;
-  date: string;        // "DD.MM.YY"
+  date: string;
 };
 
-const KEY = 'omnom_history';
-const MAX_ITEMS = 50;
-
-export function saveHistory(history: HistoryItem[]): void {
-  const payload = JSON.stringify(history.slice(0, MAX_ITEMS));
-  try {
-    window.Telegram?.WebApp?.CloudStorage?.setItem(KEY, payload);
-  } catch {}
+function formatDate(isoString: string): string {
+  const d = new Date(isoString);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`;
 }
 
-export function loadHistory(onLoad: (items: HistoryItem[]) => void): void {
-  const cs = window.Telegram?.WebApp?.CloudStorage;
-  if (!cs) {
-    onLoad([]);
+export async function saveHistoryItem(dish: MatchedDish): Promise<void> {
+  if (!dish?.id) {
+    console.warn('[OmNom] saveHistoryItem skipped — dish.id is missing:', dish);
     return;
   }
   try {
-    cs.getItem(KEY, (_err: unknown, value: string | undefined) => {
-      if (!value) { onLoad([]); return; }
-      try { onLoad(JSON.parse(value) as HistoryItem[]); }
-      catch { onLoad([]); }
+    const { error } = await supabase.from('history').insert({
+      user_id: getUserId(),
+      dish_id: dish.id,
+      dish_name: dish.name,
+      dish_image: dish.image,
+      match_percent: dish.matchPercent,
     });
+    if (error) console.error('[OmNom] history insert error:', error);
+  } catch (e) {
+    console.error('[OmNom] history insert exception:', e);
+  }
+}
+
+export async function loadHistory(): Promise<HistoryItem[]> {
+  try {
+    const { data } = await supabase
+      .from('history')
+      .select('dish_id, dish_name, dish_image, match_percent, created_at')
+      .eq('user_id', getUserId())
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (!data) return [];
+    return data.map((row) => ({
+      id: `${row.dish_id}_${row.created_at}`,
+      name: row.dish_name,
+      image: row.dish_image,
+      emoji: '🍽️',
+      matchPercent: row.match_percent,
+      date: formatDate(row.created_at),
+    }));
   } catch {
-    onLoad([]);
+    return [];
   }
 }

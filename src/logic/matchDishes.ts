@@ -1,4 +1,4 @@
-import dishesData from '../data/dishes.json';
+import { supabase } from '../lib/supabase';
 
 export type Answer = 'yes' | 'no' | 'any';
 
@@ -61,6 +61,27 @@ function sortKey(percent: number, id: string, recent: Set<string>): number {
   return percent + Math.random() * 0.5 - (recent.has(id) ? 8 : 0);
 }
 
+let cachedDishes: Dish[] | null = null;
+let loadPromise: Promise<void> | null = null;
+
+export function loadDishes(): Promise<void> {
+  if (cachedDishes !== null) return Promise.resolve();
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      console.log('[OmNom] loadDishes: fetching...');
+      const { data, error } = await supabase.from('dishes').select('*');
+      console.log('[OmNom] loadDishes response — rows:', data?.length ?? 'null', '| error:', error);
+      if (data?.length) console.log('[OmNom] loadDishes first row keys:', Object.keys(data[0]), '| values:', data[0]);
+      if (error) {
+        loadPromise = null;
+        throw error;
+      }
+      cachedDishes = (data ?? []) as Dish[];
+    })();
+  }
+  return loadPromise;
+}
+
 /**
  * Возвращает до 5 блюд:
  *   [0]   — лучшее из выбранной кухни (главный результат)
@@ -76,7 +97,8 @@ export function matchDishes(
   recentIds: string[] = [],
   topN: number = 5,
 ): MatchedDish[] {
-  const allDishes = dishesData as Dish[];
+  console.log('[OmNom] matchDishes called — cachedDishes:', cachedDishes?.length ?? 'null', '| cuisine:', cuisine);
+  const allDishes = cachedDishes ?? [];
 
   const exclusions = new Set(excludeAllergens);
   const recent = new Set(recentIds);
@@ -111,7 +133,9 @@ export function matchDishes(
     }
   }
 
-  return [topFromCuisine, ...otherTop];
+  const result = [topFromCuisine, ...otherTop];
+  console.log('[OmNom] matchDishes result[0] — id:', result[0]?.id, '| name:', result[0]?.name, '| image:', result[0]?.image, '| matchPercent:', result[0]?.matchPercent);
+  return result;
 }
 
 // Module-level last id so getRandomDish never repeats back-to-back.
@@ -120,12 +144,13 @@ let lastRandomId = '';
 /**
  * Случайное блюдо из всей базы; не повторяет последний показанный.
  */
-export function getRandomDish(recentIds: string[] = []): MatchedDish {
-  const allDishes = dishesData as Dish[];
+export function getRandomDish(recentIds: string[] = []): MatchedDish | null {
+  const allDishes = cachedDishes ?? [];
+  if (allDishes.length === 0) return null;
   const avoid = new Set([...recentIds, lastRandomId]);
   const pool = allDishes.filter((d) => !avoid.has(d.id));
   const source = pool.length > 0 ? pool : allDishes.filter((d) => d.id !== lastRandomId);
   const dish = source[Math.floor(Math.random() * source.length)];
-  lastRandomId = dish.id;
+  lastRandomId = dish?.id ?? '';
   return { ...dish, matchPercent: Math.floor(Math.random() * 20) + 75 };
 }

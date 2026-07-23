@@ -5,7 +5,7 @@ import { TabScreen } from '../App';
 import { CuisineOption, cuisineOptions, Question } from './omnomData';
 import { MatchedDish } from '../logic/matchDishes';
 import { HistoryItem } from '../logic/historyStorage';
-import { loadDiet, saveDiet } from '../logic/settingsStorage';
+import { loadDiet, saveSettings } from '../logic/settingsStorage';
 import { useLang } from '../locales/LangContext';
 import { Lang, TranslationKey } from '../locales/translations';
 
@@ -849,7 +849,7 @@ export function SingleResultScreen({
       }}>
         <div style={{ position: 'relative', width: '100%', aspectRatio: '1', backgroundColor: '#FFF1DD', overflow: 'hidden', borderRadius: '40px 40px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <img
-            src={`/src/assets/dishes/${dish.image}`}
+            src={dish.image}
             alt={dishName}
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             onError={(e) => {
@@ -1047,7 +1047,7 @@ function ResultCard({ dish, highlighted }: { dish: MatchedDish; highlighted?: bo
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <img
-          src={`/src/assets/dishes/${dish.image}`}
+          src={dish.image}
           alt={name}
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           onError={(e) => {
@@ -1121,7 +1121,7 @@ export function HistoryScreen({ history }: { history: HistoryItem[] }) {
                 <div style={{ position: 'relative' }}>
                   <div style={{ width: '100%', aspectRatio: '1', borderRadius: '16px', backgroundColor: '#FFF1DD', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
-                      src={`/src/assets/dishes/${item.image}`}
+                      src={item.image}
                       alt={itemName}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                       onError={(e) => {
@@ -1363,11 +1363,7 @@ export function ProfileScreen({ onSubPageChange }: { onSubPageChange?: (inSubPag
   };
 
   const toggleDiet = (id: string) => {
-    setDiet(prev => {
-      const next = prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id];
-      saveDiet(next);
-      return next;
-    });
+    setDiet(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]);
   };
 
   const handleShare = () => {
@@ -1465,7 +1461,7 @@ export function ProfileScreen({ onSubPageChange }: { onSubPageChange?: (inSubPag
               ))}
             </div>
             <div style={{ flexShrink: 0, padding: `12px ${PAD} calc(12px + env(safe-area-inset-bottom, 0px))` }}>
-              <PressButton onClick={() => goToSubPage('none')} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
+              <PressButton onClick={() => { saveSettings(lang, diet); goToSubPage('none'); }} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
                 {t('btn_apply')}
               </PressButton>
             </div>
@@ -1489,7 +1485,7 @@ export function ProfileScreen({ onSubPageChange }: { onSubPageChange?: (inSubPag
               ))}
             </div>
             <div style={{ flexShrink: 0, padding: `12px ${PAD} calc(12px + env(safe-area-inset-bottom, 0px))` }}>
-              <PressButton onClick={() => goToSubPage('none')} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
+              <PressButton onClick={() => { saveSettings(lang, diet); goToSubPage('none'); }} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
                 {t('btn_apply')}
               </PressButton>
             </div>
