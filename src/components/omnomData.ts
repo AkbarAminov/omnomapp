@@ -1,3 +1,5 @@
+import type { Mode } from '../logic/engine';
+
 export type CuisineOption = {
   id: string;
   title: string;
@@ -5,16 +7,6 @@ export type CuisineOption = {
   description: string;
   description_uz: string;
   emoji: string;
-};
-
-export type Question = {
-  id: string;
-  title: string;
-  title_uz: string;
-  subtitle: string;
-  subtitle_uz: string;
-  emoji: string;
-  image: string;
 };
 
 export const cuisineOptions: CuisineOption[] = [
@@ -68,50 +60,38 @@ export const cuisineOptions: CuisineOption[] = [
   },
 ];
 
-export const questions: Question[] = [
+export type ModeOption = {
+  id: Mode;
+  title: string;
+  title_uz: string;
+  description: string;
+  description_uz: string;
+  emoji: string;
+};
+
+export const modeOptions: ModeOption[] = [
   {
-    id: 'full-meal',
-    title: 'Плотно поесть?',
-    title_uz: "To'q yemoqchimisiz?",
-    subtitle: 'Типо плова, бургера или просто перекус?',
-    subtitle_uz: 'Masalan osh, burger yoki shunchaki gazak?',
-    emoji: '🥩',
-    image: '/src/assets/char-meal.png',
+    id: 'meal',
+    title: 'Плотно поесть',
+    title_uz: 'To‘yib ovqatlanish',
+    description: 'Обед или ужин, чтобы наесться',
+    description_uz: 'To‘yish uchun tushlik yoki kechki ovqat',
+    emoji: '🍽️',
   },
   {
-    id: 'with-meat',
-    title: 'С мясом?',
-    title_uz: "Go'shtli bo'lsinmi?",
-    subtitle: 'Курица, говядина… или без мяса тоже норм?',
-    subtitle_uz: "Tovuq, mol go'shti… yoki go'shtsiz ham bo'ladimi?",
-    emoji: '🍗',
-    image: '/src/assets/char-meat.png',
+    id: 'snack',
+    title: 'Перекусить',
+    title_uz: 'Yengil tamaddi',
+    description: 'Самса, ролл, что-то на ходу',
+    description_uz: 'Somsa, roll, yo‘l-yo‘lakay',
+    emoji: '🥪',
   },
   {
-    id: 'hot-food',
-    title: 'Горячее?',
-    title_uz: 'Issiqmi?',
-    subtitle: 'Что-то горячее или можно холодное?',
-    subtitle_uz: 'Issiq taom yoki sovuq ham mayli?',
-    emoji: '☕',
-    image: '/src/assets/char-hot.png',
-  },
-  {
-    id: 'maybe-soup',
-    title: 'Может суп?',
-    title_uz: "Balki sho'rva?",
-    subtitle: 'Лёгкое первое или вообще не хочется жидкого?',
-    subtitle_uz: "Engil birinchi taom yoki suyuq narsa kerak emas?",
-    emoji: '🍲',
-    image: '/src/assets/char-soup.png',
-  },
-  {
-    id: 'need-fast',
-    title: 'Нужно быстро?',
-    title_uz: 'Tez kerakmi?',
-    subtitle: 'Есть время перекусить или планируешь свой обед',
-    subtitle_uz: 'Gazak uchun vaqtingiz bormi yoki tushlik rejalashtirmoqdasiz?',
-    emoji: '⚡',
-    image: '/src/assets/char-fast.png',
+    id: 'dessert',
+    title: 'Сладкое',
+    title_uz: 'Shirinlik',
+    description: 'Десерты, выпечка, мороженое',
+    description_uz: 'Desertlar, pishiriq, muzqaymoq',
+    emoji: '🍰',
   },
 ];

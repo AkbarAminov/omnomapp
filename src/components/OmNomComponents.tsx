@@ -1,11 +1,15 @@
 'use client';
 
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { TabScreen } from '../App';
-import { CuisineOption, cuisineOptions, Question } from './omnomData';
-import { MatchedDish } from '../logic/matchDishes';
-import { HistoryItem } from '../logic/historyStorage';
+import { CuisineOption, cuisineOptions, ModeOption, modeOptions } from './omnomData';
+import type { Dish, MatchedDish, Mode, Question } from '../logic/engine';
+import { HistoryItem, HistoryMode } from '../logic/historyStorage';
 import { loadDiet, saveSettings } from '../logic/settingsStorage';
+import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
+import { openExternalLink } from '../lib/openLink';
+import { getTelegramUserInfo } from '../lib/userId';
+import { usePressScale } from '../hooks/usePressScale';
 import { useLang } from '../locales/LangContext';
 import { Lang, TranslationKey } from '../locales/translations';
 
@@ -35,14 +39,6 @@ function NavIcon({ src, active }: { src: string; active: boolean }) {
 
 // ─── Inline SVG icons ─────────────────────────────────────────────────────────
 
-function IconHeartOutline() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" stroke="#E8395A" strokeWidth="2" fill="rgba(255,255,255,0.85)" />
-    </svg>
-  );
-}
-
 function IconChevronRight() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -63,6 +59,15 @@ function IconCheckmark() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
       <path d="M2.5 7L5.5 10L11.5 4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconTrash({ color = '#6C2912' }: { color?: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <path d="M4 7h16M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7M18.5 7l-.8 12.1A2 2 0 0 1 15.7 21H8.3a2 2 0 0 1-2-1.9L5.5 7" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 11v6M14 11v6" stroke={color} strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -112,24 +117,19 @@ export function OmNomLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   };
   return (
     <div className="leading-none select-none">
-      <img src="/src/assets/logo_horizontal.svg" alt="omnom" style={{ height: heights[size] }} />
+      <img src="/assets/logo_horizontal.svg" alt="omnom" style={{ height: heights[size] }} />
     </div>
   );
 }
 
-export function ProgressBar({ step, total = 6 }: { step: number; total?: number }) {
+export function ProgressBar({ progress }: { progress: number }) {
+  const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
   return (
-    <div className="flex gap-[5px] w-full">
-      {Array.from({ length: total }).map((_, i) => (
-        <div
-          key={i}
-          className="h-[5px] flex-1 rounded-full"
-          style={{
-            backgroundColor: i < step ? '#F48924' : '#E5CDA5',
-            transition: 'background-color 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
-          }}
-        />
-      ))}
+    <div style={{ height: '6px', borderRadius: '999px', backgroundColor: '#E5CDA5', overflow: 'hidden' }}>
+      <div style={{
+        height: '100%', width: `${pct}%`, borderRadius: '999px', backgroundColor: '#F48924',
+        transition: 'width 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+      }} />
     </div>
   );
 }
@@ -141,10 +141,10 @@ type BottomNavProps = { active?: TabScreen; onTabChange?(tab: TabScreen): void }
 export function BottomNav({ active = 'home', onTabChange }: BottomNavProps) {
   const { t } = useLang();
   const items: Array<{ id: TabScreen; src: string; labelKey: TranslationKey }> = [
-    { id: 'home',    src: '/src/assets/icons/nav-home.svg',    labelKey: 'nav_home' },
-    { id: 'history', src: '/src/assets/icons/nav-history.svg', labelKey: 'nav_history' },
-    { id: 'map',     src: '/src/assets/icons/nav-map.svg',     labelKey: 'nav_map' },
-    { id: 'profile', src: '/src/assets/icons/nav-profile.svg', labelKey: 'nav_profile' },
+    { id: 'home',    src: '/assets/icons/nav-home.svg',    labelKey: 'nav_home' },
+    { id: 'history', src: '/assets/icons/nav-history.svg', labelKey: 'nav_history' },
+    { id: 'map',     src: '/assets/icons/nav-map.svg',     labelKey: 'nav_map' },
+    { id: 'profile', src: '/assets/icons/nav-profile.svg', labelKey: 'nav_profile' },
   ];
   return (
     <div
@@ -189,11 +189,7 @@ export function BottomNav({ active = 'home', onTabChange }: BottomNavProps) {
                 justifyContent: 'center',
                 transition: 'background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1), transform 0.15s ease',
               }}
-              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.9)')}
-              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-              onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-              onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.9)')}
-              onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
+              {...usePressScale(0.9)}
             >
               <NavIcon src={src} active={isActive} />
             </button>
@@ -245,14 +241,51 @@ function PressButton({
         transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
         boxShadow: shadow,
       }}
-      onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.96)')}
-      onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-      onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-      onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.96)')}
-      onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
+      {...usePressScale(0.96)}
     >
       {children}
     </button>
+  );
+}
+
+// ─── App-level loading / error (initial dish fetch, before any screen) ───────
+
+export function AppLoadingScreen() {
+  const { t } = useLang();
+  return (
+    <Screen>
+      <div className="flex flex-col items-center justify-center flex-1" style={{ gap: '20px' }}>
+        <OmNomLogo size="lg" />
+        <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', opacity: 0.6, fontSize: '15px' }}>
+          {t('app_loading_text')}
+        </p>
+      </div>
+    </Screen>
+  );
+}
+
+export function AppErrorScreen({ onRetry }: { onRetry(): void }) {
+  const { t } = useLang();
+  return (
+    <Screen>
+      <div
+        className="flex flex-col items-center justify-center flex-1 text-center"
+        style={{ gap: '16px', padding: PAD }}
+      >
+        <span style={{ fontSize: '52px' }}>😔</span>
+        <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912', fontSize: '20px', margin: 0, letterSpacing: '-0.02em' }}>
+          {t('app_error_title')}
+        </p>
+        <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, color: '#6C2912', opacity: 0.6, fontSize: '14px', margin: 0, lineHeight: 1.5 }}>
+          {t('app_error_subtitle')}
+        </p>
+        <div style={{ marginTop: '8px', width: 'min(220px, 70%)' }}>
+          <PressButton onClick={onRetry} bg="#F48924" color="#fff">
+            {t('app_error_retry')}
+          </PressButton>
+        </div>
+      </div>
+    </Screen>
   );
 }
 
@@ -268,7 +301,7 @@ export function StartScreen({ onStart, onRandomizer }: { onStart(): void; onRand
       >
         <div className="flex flex-col items-center select-none">
           <img
-            src="/src/assets/logo_vertical.svg"
+            src="/assets/logo_vertical.svg"
             alt="omnom"
             style={{ height: 'clamp(90px, 22vw, 130px)' }}
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -287,7 +320,7 @@ export function StartScreen({ onStart, onRandomizer }: { onStart(): void; onRand
             overflow: 'hidden'
           }}
         >
-          <img src="/src/assets/char-start.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <img src="/assets/char-start.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
 
         <h1 style={{
@@ -315,6 +348,63 @@ export function StartScreen({ onStart, onRandomizer }: { onStart(): void; onRand
   );
 }
 
+// ─── Screen 1 — Mode selection («Что хочется?») ─────────────────────────────
+
+export function ModeSelectScreen({ onSelect }: { onSelect(mode: Mode): void }) {
+  const { t } = useLang();
+  return (
+    <Screen>
+      <div style={{ padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+        <OmNomLogo size="md" />
+      </div>
+      <h2 style={{
+        fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', textAlign: 'center',
+        fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em',
+        margin: `clamp(24px, 4.5dvh, 44px) ${PAD} clamp(18px, 3.4dvh, 30px)`,
+      }}>
+        {t('mode_title')}
+      </h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(12px, 3.4vw, 15px)', padding: `0 ${PAD} 16px` }}>
+        {modeOptions.map((m) => <ModeCard key={m.id} option={m} onSelect={() => onSelect(m.id)} />)}
+      </div>
+    </Screen>
+  );
+}
+
+function ModeCard({ option, onSelect }: { option: ModeOption; onSelect(): void }) {
+  const { lang } = useLang();
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 'clamp(14px, 4.3vw, 19px)',
+        padding: 'clamp(16px, 4.5vw, 22px)', width: '100%', minHeight: 'clamp(104px, 28vw, 124px)',
+        borderRadius: '25px', backgroundColor: '#fff', border: '2px solid transparent',
+        boxShadow: '0 4px 16px rgba(149,104,33,0.09)', cursor: 'pointer', textAlign: 'left',
+        transition: 'transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
+      }}
+      {...usePressScale(0.96)}
+    >
+      <div style={{
+        width: 'clamp(64px, 17vw, 76px)', height: 'clamp(64px, 17vw, 76px)', borderRadius: '50%',
+        backgroundColor: '#FFF1DD', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 'clamp(30px, 8vw, 36px)', flexShrink: 0,
+      }}>
+        {option.emoji}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(18px, 5vw, 22px)', lineHeight: 1.2, letterSpacing: '-0.02em' }}>
+          {lang === 'uz' ? option.title_uz : option.title}
+        </div>
+        <div style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7, fontSize: 'clamp(12px, 3.3vw, 14px)', lineHeight: 1.35 }}>
+          {lang === 'uz' ? option.description_uz : option.description}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 // ─── Screen 2 — Cuisine selection ─────────────────────────────────────────────
 
 export function CuisineSelectionScreen({
@@ -332,7 +422,7 @@ export function CuisineSelectionScreen({
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <OmNomLogo size="md" />
         </div>
-        <ProgressBar step={1} />
+        <ProgressBar progress={0} />
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: `clamp(24px, 4.2dvh, 40px) ${PAD} 0` }}>
@@ -383,10 +473,7 @@ function CuisineCard({ cuisine, selected, onSelect }: { cuisine: CuisineOption; 
         transition: 'all 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
         textAlign: 'center',
       }}
-      onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.95)')}
-      onMouseUp={e => (e.currentTarget.style.transform = selected ? 'scale(1.03)' : 'scale(1)')}
-      onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.95)')}
-      onTouchEnd={e => (e.currentTarget.style.transform = selected ? 'scale(1.03)' : 'scale(1)')}
+      {...usePressScale(0.95, () => (selected ? 1.03 : 1))}
     >
       <div style={{
         width: 'clamp(60px, 15.9vw, 70px)', height: 'clamp(60px, 15.9vw, 70px)',
@@ -418,146 +505,151 @@ function CuisineCard({ cuisine, selected, onSelect }: { cuisine: CuisineOption; 
 
 // ─── SwipeCard ────────────────────────────────────────────────────────────────
 
-type SwipeCardHandle = { swipe(dir: 'left' | 'right'): void };
+type SwipeDir = 'left' | 'right' | 'up';
+type SwipeCardHandle = { swipe(dir: SwipeDir): void };
+
+export const CARD_EXIT_MS = 320;
+const SWIPE_DISTANCE = 80;
+const FLICK_VELOCITY = 0.5; // px per ms
+const EXIT_EASE = 'cubic-bezier(0.4, 0, 1, 1)';
+const RETURN_EASE = 'cubic-bezier(0.18, 0.89, 0.32, 1.2)';
 
 type SwipeCardProps = {
   children: React.ReactNode;
-  onSwipeLeft(): void;
-  onSwipeRight(): void;
+  onSwipe(dir: SwipeDir): void;
   onExitStart?(): void;
-  className?: string;
   style?: React.CSSProperties;
 };
 
-const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
-  ({ children, onSwipeLeft, onSwipeRight, onExitStart, className = '', style: extraStyle }, ref) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const overlayRef = useRef<HTMLDivElement>(null);
-    const labelYesRef = useRef<HTMLDivElement>(null);
-    const labelNoRef = useRef<HTMLDivElement>(null);
+// Pose updates go straight to the DOM (transform/opacity only) so dragging never re-renders React.
+const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwipe, onExitStart, style }, ref) => {
+  const { t } = useLang();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const tintRef = useRef<HTMLDivElement>(null);
+  const yesRef = useRef<HTMLDivElement>(null);
+  const noRef = useRef<HTMLDivElement>(null);
+  const exiting = useRef(false);
+  const drag = useRef<{ x: number; y: number; lastX: number; lastY: number; lastT: number; vx: number; vy: number } | null>(null);
+  const raf = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const isDragging = useRef(false);
-    const isExitingRef = useRef(false);
-    const startX = useRef(0);
-    const rafId = useRef(0);
-    const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pose = useCallback((dx: number, dy: number, transition: string | null, fade = 1) => {
+    const el = cardRef.current;
+    if (!el) return;
+    const rotate = Math.max(-15, Math.min(15, dx * 0.06));
+    el.style.transition = transition ? `transform ${transition}, opacity ${transition}` : 'none';
+    el.style.transform = `translate3d(${dx}px, ${dy}px, 0) rotate(${rotate}deg)`;
+    el.style.opacity = String(fade);
+    const strength = Math.min(Math.abs(dx) / 110, 1);
+    for (const node of [tintRef.current, yesRef.current, noRef.current]) if (node) node.style.transition = transition ? `opacity ${transition}` : 'none';
+    if (tintRef.current) {
+      tintRef.current.style.backgroundColor = dx >= 0 ? 'rgb(34,197,94)' : 'rgb(239,68,68)';
+      tintRef.current.style.opacity = String(strength * 0.4);
+    }
+    if (yesRef.current) yesRef.current.style.opacity = String(dx > 0 ? strength : 0);
+    if (noRef.current) noRef.current.style.opacity = String(dx < 0 ? strength : 0);
+  }, []);
 
-    const updateDOM = useCallback((dx: number) => {
-      const el = containerRef.current;
-      if (!el) return;
-      const rotation = Math.max(-16, Math.min(16, dx * 0.09));
-      el.style.transform = `translateX(${dx}px) rotate(${rotation}deg)`;
+  const commit = useCallback((dir: SwipeDir) => {
+    if (exiting.current) return;
+    exiting.current = true;
+    drag.current = null;
+    onExitStart?.();
+    haptic('medium');
+    const w = window.innerWidth;
+    const move = `${CARD_EXIT_MS}ms ${EXIT_EASE}`;
+    if (dir === 'up') pose(0, -window.innerHeight * 0.8, move, 0);
+    else pose(dir === 'right' ? w * 1.3 : -w * 1.3, 40, move);
+    timer.current = setTimeout(() => onSwipe(dir), CARD_EXIT_MS);
+  }, [onExitStart, onSwipe, pose]);
 
-      const absX = Math.abs(dx);
-      const opacity = Math.min(absX / 90, 0.55);
-      const isR = dx > 15;
-      const isL = dx < -15;
+  useImperativeHandle(ref, () => ({ swipe: commit }), [commit]);
 
-      if (overlayRef.current) {
-        if (absX > 10) {
-          overlayRef.current.style.display = 'block';
-          overlayRef.current.style.backgroundColor = isR ? `rgba(34,197,94,${opacity})` : `rgba(239,68,68,${opacity})`;
-        } else {
-          overlayRef.current.style.display = 'none';
-        }
-      }
-      if (labelYesRef.current) labelYesRef.current.style.display = isR && opacity > 0.08 ? 'flex' : 'none';
-      if (labelNoRef.current) labelNoRef.current.style.display = isL && opacity > 0.08 ? 'flex' : 'none';
-    }, []);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+    cancelAnimationFrame(raf.current);
+  }, []);
 
-    const commit = useCallback((dir: 'left' | 'right') => {
-      if (isExitingRef.current) return;
-      isExitingRef.current = true;
-      onExitStart?.();
-      haptic('medium');
-      const el = containerRef.current;
-      if (el) el.style.transition = 'transform 0.35s cubic-bezier(0.55, 0, 0.85, 0.25)';
-      updateDOM(dir === 'right' ? 900 : -900);
-      exitTimer.current = setTimeout(() => {
-        if (dir === 'right') onSwipeRight(); else onSwipeLeft();
-      }, 350);
-    }, [onSwipeLeft, onSwipeRight, onExitStart, updateDOM]);
+  const springBack = () => pose(0, 0, `0.45s ${RETURN_EASE}`);
 
-    useEffect(() => () => {
-      if (exitTimer.current) clearTimeout(exitTimer.current);
-      cancelAnimationFrame(rafId.current);
-    }, []);
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (exiting.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const now = performance.now();
+    drag.current = { x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY, lastT: now, vx: 0, vy: 0 };
+    pose(0, 0, null);
+  };
 
-    useImperativeHandle(ref, () => ({ swipe: commit }), [commit]);
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d || exiting.current) return;
+    const now = performance.now();
+    const dt = Math.max(1, now - d.lastT);
+    d.vx = 0.8 * ((e.clientX - d.lastX) / dt) + 0.2 * d.vx;
+    d.vy = 0.8 * ((e.clientY - d.lastY) / dt) + 0.2 * d.vy;
+    d.lastX = e.clientX; d.lastY = e.clientY; d.lastT = now;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    cancelAnimationFrame(raf.current);
+    raf.current = requestAnimationFrame(() => pose(dx, dy * 0.5, null));
+  };
 
-    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (isExitingRef.current) return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      isDragging.current = true;
-      startX.current = e.clientX;
-      const el = containerRef.current;
-      if (el) { el.style.animation = 'none'; el.style.transition = 'none'; el.style.cursor = 'grabbing'; }
-    };
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d || exiting.current) return;
+    drag.current = null;
+    cancelAnimationFrame(raf.current);
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    const horizontal = Math.abs(dx) >= Math.abs(dy);
+    if (horizontal && (dx > SWIPE_DISTANCE || d.vx > FLICK_VELOCITY)) commit('right');
+    else if (horizontal && (dx < -SWIPE_DISTANCE || d.vx < -FLICK_VELOCITY)) commit('left');
+    else if (!horizontal && (dy < -SWIPE_DISTANCE || d.vy < -FLICK_VELOCITY)) commit('up');
+    else springBack();
+  };
 
-    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!isDragging.current || isExitingRef.current) return;
-      const dx = e.clientX - startX.current;
-      cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(() => updateDOM(dx));
-    };
+  const onPointerCancel = () => {
+    if (!drag.current || exiting.current) return;
+    drag.current = null;
+    springBack();
+  };
 
-    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!isDragging.current) return;
-      isDragging.current = false;
-      const el = containerRef.current;
-      if (el) el.style.cursor = 'grab';
-      const dx = e.clientX - startX.current;
-      if (Math.abs(dx) > 72) {
-        commit(dx > 0 ? 'right' : 'left');
-      } else {
-        if (el) el.style.transition = 'transform 0.42s cubic-bezier(0.18, 0.89, 0.32, 1.1)';
-        updateDOM(0);
-        setTimeout(() => {
-          if (overlayRef.current) overlayRef.current.style.display = 'none';
-          if (labelYesRef.current) labelYesRef.current.style.display = 'none';
-          if (labelNoRef.current) labelNoRef.current.style.display = 'none';
-        }, 50);
-      }
-    };
+  const stamp: React.CSSProperties = {
+    position: 'absolute', top: '20px', padding: '4px 12px', borderRadius: '8px', opacity: 0,
+    fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 'clamp(16px, 4vw, 22px)', textTransform: 'uppercase',
+    pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  };
 
-    const handlePointerCancel = () => {
-      if (!isDragging.current) return;
-      isDragging.current = false;
-      const el = containerRef.current;
-      if (el) { el.style.cursor = 'grab'; el.style.transition = 'transform 0.42s cubic-bezier(0.18, 0.89, 0.32, 1.1)'; }
-      updateDOM(0);
-    };
-
-    return (
-      <div
-        ref={containerRef}
-        className={`relative select-none ${className}`}
-        style={{
-          transform: 'translateX(0) rotate(0deg)',
-          touchAction: 'none',
-          cursor: 'grab',
-          willChange: 'transform',
-          transformOrigin: 'center bottom',
-          ...extraStyle,
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
-      >
-        {children}
-        <div ref={overlayRef} style={{ display: 'none', position: 'absolute', inset: 0, borderRadius: '40px', pointerEvents: 'none' }} />
-        <div ref={labelYesRef} style={{ display: 'none', position: 'absolute', top: '20px', left: '20px', padding: '4px 12px', borderRadius: '8px', border: '3px solid #22C55E', color: '#22C55E', fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 'clamp(16px, 4vw, 22px)', transform: 'rotate(-12deg)', pointerEvents: 'none', alignItems: 'center', justifyContent: 'center' }}>ДА</div>
-        <div ref={labelNoRef} style={{ display: 'none', position: 'absolute', top: '20px', right: '20px', padding: '4px 12px', borderRadius: '8px', border: '3px solid #EF4444', color: '#EF4444', fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 'clamp(16px, 4vw, 22px)', transform: 'rotate(12deg)', pointerEvents: 'none', alignItems: 'center', justifyContent: 'center' }}>НЕТ</div>
-      </div>
-    );
-  }
-);
+  return (
+    <div
+      ref={cardRef}
+      className="select-none"
+      style={{
+        transform: 'translate3d(0, 0, 0)',
+        touchAction: 'none',
+        cursor: 'grab',
+        willChange: 'transform, opacity',
+        transformOrigin: 'center 120%',
+        ...style,
+      }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+    >
+      {children}
+      <div ref={tintRef} style={{ position: 'absolute', inset: 0, borderRadius: '40px', pointerEvents: 'none', opacity: 0 }} />
+      <div ref={yesRef} style={{ ...stamp, left: '20px', border: '3px solid #22C55E', color: '#22C55E', transform: 'rotate(-12deg)' }}>{t('answer_yes')}</div>
+      <div ref={noRef} style={{ ...stamp, right: '20px', border: '3px solid #EF4444', color: '#EF4444', transform: 'rotate(12deg)' }}>{t('answer_no')}</div>
+    </div>
+  );
+});
 SwipeCard.displayName = 'SwipeCard';
 
 function QuestionImage({ question }: { question: Question }) {
   const [imgError, setImgError] = useState(false);
-  if (imgError) {
+  const { lang } = useLang();
+  if (!question.image || imgError) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF1DD' }}>
         <span style={{ fontSize: 'clamp(80px, 20vw, 120px)', filter: 'drop-shadow(0 8px 18px rgba(149,104,33,0.18))' }}>{question.emoji}</span>
@@ -565,14 +657,14 @@ function QuestionImage({ question }: { question: Question }) {
     );
   }
   return (
-    <img src={question.image} alt={question.title} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} onError={() => setImgError(true)} draggable={false} />
+    <img src={question.image} alt={lang === 'uz' ? question.question_uz : question.question_ru} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} onError={() => setImgError(true)} draggable={false} />
   );
 }
 
 function QuestionCardBody({ question }: { question: Question }) {
   const { lang } = useLang();
-  const title    = lang === 'uz' ? question.title_uz    : question.title;
-  const subtitle = lang === 'uz' ? question.subtitle_uz : question.subtitle;
+  const title    = lang === 'uz' ? question.question_uz : question.question_ru;
+  const subtitle = lang === 'uz' ? question.subtitle_uz : question.subtitle_ru;
   return (
     <>
       <div style={{ padding: 'clamp(20px, 4.2%, 42px) clamp(16px, 4.1%, 18px) clamp(10px, 1.8%, 10px)', textAlign: 'center', flexShrink: 0 }}>
@@ -591,7 +683,7 @@ function QuestionCardBody({ question }: { question: Question }) {
         </p>
       </div>
       <div style={{ flex: 1, minHeight: 0, margin: '0 clamp(10px,2.5vw,14px) clamp(10px,2.5vw,14px)', borderRadius: '24px', backgroundColor: '#FFF1DD', overflow: 'hidden' }}>
-        <QuestionImage question={question} />
+        <QuestionImage key={question.id} question={question} />
       </div>
     </>
   );
@@ -599,47 +691,63 @@ function QuestionCardBody({ question }: { question: Question }) {
 
 // ─── Screens 3–7 — Question cards ─────────────────────────────────────────────
 
-export function QuestionCardScreen({
-  question, nextQuestion, step, onAnswer,
+const CARD_BOX: React.CSSProperties = {
+  position: 'absolute', inset: 0, borderRadius: '40px', backgroundColor: '#fff',
+  display: 'flex', flexDirection: 'column', overflow: 'hidden',
+};
+const BACK_REST = 'translate3d(0, 14px, 0) scale(0.94)';
+
+export const QuestionCardScreen = memo(function QuestionCardScreen({
+  question, isLast, progress, questionNumber, remaining, onAnswer,
 }: {
   question: Question;
-  nextQuestion: Question | null;
-  step: number;
+  isLast: boolean;
+  progress: number;
+  questionNumber: number;
+  remaining: number;
   onAnswer(value: 'yes' | 'no' | 'any'): void;
 }) {
   const { t } = useLang();
   const swipeRef = useRef<SwipeCardHandle>(null);
-  const backCardRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
 
+  // The blank back card sits behind; when the front card leaves it moves forward, and the next
+  // question mounts exactly in its place, so nothing jumps.
   useLayoutEffect(() => {
-    const el = backCardRef.current;
+    const el = backRef.current;
     if (!el) return;
     el.style.transition = 'none';
-    el.style.transform = 'scale(0.93) translateY(8px)';
+    el.style.transform = BACK_REST;
   }, [question.id]);
 
   const handleExitStart = useCallback(() => {
-    const el = backCardRef.current;
+    const el = backRef.current;
     if (!el) return;
-    el.style.transition = 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)';
-    el.style.transform = 'scale(1) translateY(0)';
+    el.style.transition = `transform ${CARD_EXIT_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+    el.style.transform = 'translate3d(0, 0, 0) scale(1)';
   }, []);
 
-  const anyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (anyTimerRef.current) clearTimeout(anyTimerRef.current); }, []);
+  const handleSwipe = useCallback((dir: SwipeDir) => {
+    onAnswer(dir === 'right' ? 'yes' : dir === 'left' ? 'no' : 'any');
+  }, [onAnswer]);
 
-  const handleAny = useCallback(() => {
-    handleExitStart();
-    anyTimerRef.current = setTimeout(() => onAnswer('any'), 350);
-  }, [handleExitStart, onAnswer]);
+  const label: React.CSSProperties = { fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', fontSize: 'clamp(12px, 3.3vw, 14px)' };
 
   return (
     <Screen>
-      <div style={{ padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`, display: 'flex', flexDirection: 'column', gap: 'clamp(20px, 4.5dvh, 43px)', flexShrink: 0 }}>
+      <div style={{ padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`, display: 'flex', flexDirection: 'column', gap: 'clamp(16px, 3.5dvh, 32px)', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <OmNomLogo size="md" />
         </div>
-        <ProgressBar step={step} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span style={label}>{t('quiz_question_n').replace('{n}', String(questionNumber))}</span>
+            <span style={{ ...label, opacity: 0.6 }}>
+              {isLast ? t('quiz_last') : t('quiz_remaining').replace('{k}', String(Math.max(1, remaining - 1)))}
+            </span>
+          </div>
+          <ProgressBar progress={progress} />
+        </div>
       </div>
 
       <div style={{
@@ -650,38 +758,26 @@ export function QuestionCardScreen({
         marginTop: 'clamp(20px, 4.9dvh, 47px)',
         flexShrink: 0,
       }}>
-        {nextQuestion && (
-          <div
-            ref={backCardRef}
-            style={{
-              position: 'absolute', inset: 0,
-              borderRadius: '40px', backgroundColor: '#fff',
-              display: 'flex', flexDirection: 'column',
-              overflow: 'hidden',
-              transform: 'scale(0.93) translateY(8px)',
-              willChange: 'transform',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-            }}
-          >
-            <QuestionCardBody question={nextQuestion} />
+        {isLast ? (
+          <div style={{ ...CARD_BOX, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', opacity: 0.35, fontSize: 'clamp(24px, 7vw, 32px)', letterSpacing: '-0.02em' }}>
+              {t('quiz_searching')}
+            </span>
           </div>
+        ) : (
+          <div ref={backRef} style={{ ...CARD_BOX, transform: BACK_REST, willChange: 'transform', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }} />
         )}
 
         <SwipeCard
           key={question.id}
           ref={swipeRef}
-          onExitStart={handleExitStart}
-          onSwipeLeft={() => onAnswer('no')}
-          onSwipeRight={() => onAnswer('yes')}
-          style={{
-            position: 'absolute', inset: 0,
-            borderRadius: '40px', backgroundColor: '#fff',
-            display: 'flex', flexDirection: 'column',
-            overflow: 'hidden',
-            boxShadow: '0 4px 31px rgba(0,0,0,0.1)',
-          }}
+          onExitStart={isLast ? undefined : handleExitStart}
+          onSwipe={handleSwipe}
+          style={{ ...CARD_BOX, boxShadow: '0 4px 31px rgba(0,0,0,0.1)' }}
         >
-          <QuestionCardBody question={question} />
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, animation: 'cardContentIn 0.22s ease-out both' }}>
+            <QuestionCardBody question={question} />
+          </div>
         </SwipeCard>
       </div>
 
@@ -693,26 +789,26 @@ export function QuestionCardScreen({
       }}>
         <ActionCircle
           size="large"
-          icon={<img src="/src/assets/icons/answer-no.svg" alt="" style={{ width: '46%', height: '46%', pointerEvents: 'none' }} />}
+          icon={<img src="/assets/icons/answer-no.svg" alt="" style={{ width: '46%', height: '46%', pointerEvents: 'none' }} />}
           label={t('answer_no')} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6"
           onClick={() => swipeRef.current?.swipe('left')}
         />
         <ActionCircle
           size="small"
-          icon={<img src="/src/assets/icons/answer-any.svg" alt="" style={{ width: '56%', height: '56%', pointerEvents: 'none' }} />}
+          icon={<img src="/assets/icons/answer-any.svg" alt="" style={{ width: '56%', height: '56%', pointerEvents: 'none' }} />}
           label={t('answer_any')} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6"
-          onClick={handleAny}
+          onClick={() => swipeRef.current?.swipe('up')}
         />
         <ActionCircle
           size="large"
-          icon={<img src="/src/assets/icons/answer-yes.svg" alt="" style={{ width: '50%', height: '50%', pointerEvents: 'none' }} />}
+          icon={<img src="/assets/icons/answer-yes.svg" alt="" style={{ width: '50%', height: '50%', pointerEvents: 'none' }} />}
           label={t('answer_yes')} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6"
           onClick={() => swipeRef.current?.swipe('right')}
         />
       </div>
     </Screen>
   );
-}
+});
 
 function ActionCircle({ icon, label, bg, onClick, size, shadow }: {
   icon: React.ReactNode; label: string; bg: string; onClick(): void; size: 'large' | 'small';
@@ -723,16 +819,13 @@ function ActionCircle({ icon, label, bg, onClick, size, shadow }: {
     <button
       type="button"
       onClick={onClick}
+      aria-label={label}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
         background: 'none', border: 'none', cursor: 'pointer',
         transition: 'transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
       }}
-      onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.86)')}
-      onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-      onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-      onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.86)')}
-      onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
+      {...usePressScale(0.86)}
     >
       <div style={{
         width: dim, height: dim, borderRadius: '50%',
@@ -751,6 +844,40 @@ function ActionCircle({ icon, label, bg, onClick, size, shadow }: {
         {label}
       </span>
     </button>
+  );
+}
+
+// ─── Dish image with emoji placeholder ───────────────────────────────────────
+// Fills its (position: relative) parent, so the layout is identical with or without a photo.
+
+function DishImage({ image, emoji, alt, emojiSize }: { image: string; emoji: string; alt: string; emojiSize: string }) {
+  const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const showImg = !!image && !failed;
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'radial-gradient(circle at 50% 42%, #FFF6E8 0%, #FFE4BD 58%, #FFD29C 100%)',
+    }}>
+      {(!showImg || !loaded) && (
+        <span style={{ fontSize: emojiSize, lineHeight: 1, filter: 'drop-shadow(0 8px 18px rgba(149,104,33,0.22))' }}>{emoji}</span>
+      )}
+      {showImg && (
+        <img
+          src={image}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+            opacity: loaded ? 1 : 0, transition: 'opacity 0.25s ease',
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -784,7 +911,7 @@ export function LoadingScreen({ progress }: { progress: number }) {
         padding: `clamp(8px, 1.5dvh, 16px) 0`,
       }}>
         <img
-          src="/src/assets/char-loading.png"
+          src="/assets/char-loading.png"
           alt=""
           style={{
             height: 'clamp(240px, 44dvh, 400px)',
@@ -828,15 +955,26 @@ export function LoadingScreen({ progress }: { progress: number }) {
 // ─── Screen 9 — Single result ─────────────────────────────────────────────────
 
 export function SingleResultScreen({
-  dish, onNearby, onRetry, onAllResults,
-}: { dish: MatchedDish; onNearby(): void; onRetry(): void; onAllResults(): void; onGoHome(): void }) {
+  dish, exact = true, onRetry, onAllResults, onGoHome, variant = 'quiz',
+}: {
+  dish: MatchedDish; exact?: boolean; onRetry(): void; onAllResults?(): void; onGoHome(): void;
+  variant?: 'quiz' | 'randomizer';
+}) {
   const { t, lang } = useLang();
   const dishName = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
   const dishDesc = lang === 'uz' ? (dish.description_uz || dish.description) : dish.description;
   return (
     <Screen>
       <div style={{ display: 'flex', justifyContent: 'center', padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`, flexShrink: 0 }}>
-        <OmNomLogo size="sm" />
+        <button
+          type="button"
+          onClick={onGoHome}
+          aria-label={t('nav_home')}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)' }}
+          {...usePressScale(0.94)}
+        >
+          <OmNomLogo size="sm" />
+        </button>
       </div>
 
       <div style={{
@@ -848,35 +986,7 @@ export function SingleResultScreen({
         boxShadow: '0 14px 8px rgba(0,0,0,0.07)',
       }}>
         <div style={{ position: 'relative', width: '100%', aspectRatio: '1', backgroundColor: '#FFF1DD', overflow: 'hidden', borderRadius: '40px 40px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <img
-            src={dish.image}
-            alt={dishName}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-              const parent = (e.target as HTMLImageElement).parentElement!;
-              const span = document.createElement('span');
-              span.textContent = dish.emoji;
-              span.style.fontSize = 'clamp(80px, 20vw, 120px)';
-              parent.appendChild(span);
-            }}
-          />
-          <button
-            type="button"
-            style={{
-              position: 'absolute', top: '14px', left: '14px',
-              width: '40px', height: '40px', borderRadius: '50%',
-              backgroundColor: 'rgba(255,255,255,0.88)', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'transform 0.15s',
-            }}
-            onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.9)')}
-            onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-            onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.9)')}
-            onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
-          >
-            <IconHeartOutline />
-          </button>
+          <DishImage key={dish.id} image={dish.image} emoji={dish.emoji} alt={dishName} emojiSize="clamp(96px, 28vw, 150px)" />
         </div>
 
         <div style={{ padding: 'clamp(16px, 2.4dvh, 23px) clamp(16px, 4vw, 22px) clamp(18px, 2.7dvh, 26px)', textAlign: 'center' }}>
@@ -887,14 +997,21 @@ export function SingleResultScreen({
           }}>
             {dishName}
           </h1>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '5px', marginTop: 'clamp(6px, 1dvh, 10px)' }}>
-            <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#F48924', fontSize: 'clamp(12px, 3vw, 14px)' }}>
-              {t('result_match_label')}
-            </span>
-            <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#F48924', fontSize: 'clamp(22px, 5.5vw, 28px)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-              {dish.matchPercent}%
-            </span>
-          </div>
+          {variant === 'quiz' && !exact && (
+            <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', opacity: 0.6, fontSize: 'clamp(12px, 3vw, 14px)', marginTop: '6px' }}>
+              {t('result_no_exact')}
+            </div>
+          )}
+          {variant === 'quiz' && dish.matchPercent != null && (
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '5px', marginTop: 'clamp(6px, 1dvh, 10px)' }}>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#F48924', fontSize: 'clamp(12px, 3vw, 14px)' }}>
+                {t('result_match_label')}
+              </span>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#F48924', fontSize: 'clamp(22px, 5.5vw, 28px)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                <AnimatedPercent value={dish.matchPercent} />
+              </span>
+            </div>
+          )}
           <p style={{
             fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7,
             fontSize: 'clamp(13px, 3.5vw, 16px)', marginTop: 'clamp(8px, 1.5dvh, 14px)',
@@ -912,9 +1029,13 @@ export function SingleResultScreen({
         flexShrink: 0, padding: `0 ${PAD}`,
         paddingBottom: 'clamp(8px, 1.5dvh, 14px)',
       }}>
-        <ActionCircle size="large" icon={<img src="/src/assets/icons/reply-location.svg" alt="" style={{ width: '48%', height: '48%', pointerEvents: 'none' }} />} label={t('btn_nearby')} onClick={onNearby} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
-        <ActionCircle size="small" icon={<img src="/src/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_retry')} onClick={onRetry} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
-        <ActionCircle size="large" icon={<img src="/src/assets/icons/reply-variants.svg" alt="" style={{ width: '48%', height: '48%', pointerEvents: 'none' }} />} label={t('btn_all_results')} onClick={onAllResults} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+        {variant === 'randomizer' && (
+          <ActionCircle size="large" icon={<IconArrowLeft />} label={t('btn_back')} onClick={onGoHome} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+        )}
+        <ActionCircle size="large" icon={<img src="/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_retry')} onClick={onRetry} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+        {variant === 'quiz' && onAllResults && (
+          <ActionCircle size="large" icon={<img src="/assets/icons/reply-variants.svg" alt="" style={{ width: '48%', height: '48%', pointerEvents: 'none' }} />} label={t('btn_all_results')} onClick={onAllResults} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+        )}
       </div>
     </Screen>
   );
@@ -977,14 +1098,32 @@ export function NoResultsScreen({ onRetry, onGoHome }: { onRetry(): void; onGoHo
 // ─── Screen 10 — Results list ─────────────────────────────────────────────────
 
 export function ResultsListScreen({
-  results, onNearby, onRetry,
-}: { results: MatchedDish[]; onNearby(): void; onRetry(): void; onGoHome(): void }) {
+  sameCuisineResults, allCuisineResults, onOpenHistory, onRetry, onGoHome, onTabChange,
+}: {
+  sameCuisineResults: MatchedDish[]; allCuisineResults: MatchedDish[] | null;
+  onOpenHistory(): void; onRetry(): void; onGoHome(): void;
+  onTabChange?(tab: 'cuisine' | 'all'): void;
+}) {
   const { t } = useLang();
+  const [tab, setTab] = useState<'cuisine' | 'all'>('cuisine');
+  const selectTab = (id: 'cuisine' | 'all') => {
+    setTab(id);
+    onTabChange?.(id);
+  };
+  const activeResults = tab === 'cuisine' || !allCuisineResults ? sameCuisineResults : allCuisineResults;
   return (
     <Screen>
       <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'clamp(12px, 2.5dvh, 20px)' }}>
-          <OmNomLogo size="md" />
+          <button
+            type="button"
+            onClick={onGoHome}
+            aria-label={t('nav_home')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)' }}
+            {...usePressScale(0.94)}
+          >
+            <OmNomLogo size="md" />
+          </button>
         </div>
         <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em' }}>
           {t('results_title')}
@@ -992,12 +1131,34 @@ export function ResultsListScreen({
         <p style={{ color: '#6C2912', opacity: 0.7, fontFamily: 'Inter, sans-serif', fontSize: 'clamp(12px, 3vw, 14px)', marginTop: '4px' }}>
           {t('results_subtitle')}
         </p>
+
+        {allCuisineResults && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'clamp(14px, 2.8dvh, 20px)' }}>
+            <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '999px', padding: '4px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>
+              {(['cuisine', 'all'] as const).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => selectTab(id)}
+                  style={{
+                    padding: '9px 18px', borderRadius: '999px', border: 'none', cursor: 'pointer',
+                    fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 'clamp(12px, 3.2vw, 14px)',
+                    backgroundColor: tab === id ? '#F48924' : 'transparent',
+                    color: tab === id ? '#fff' : '#6C2912',
+                    transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s',
+                  }}
+                  {...usePressScale(0.95)}
+                >
+                  {t(id === 'cuisine' ? 'tab_this_cuisine' : 'tab_all_cuisines')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: `12px ${PAD}`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {[...results]
-          .sort((a, b) => b.matchPercent - a.matchPercent)
-          .map((dish, i) => <ResultCard key={dish.id} dish={dish} highlighted={i === 0} />)}
+        {activeResults.map((dish, i) => <ResultCard key={dish.id} dish={dish} highlighted={i === 0} />)}
       </div>
 
       <div style={{ display: 'flex', gap: '10px', padding: `8px ${PAD} 10px`, flexShrink: 0 }}>
@@ -1012,16 +1173,12 @@ export function ResultsListScreen({
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
           }}
-          onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.9)')}
-          onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-          onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.9)')}
-          onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
+          {...usePressScale(0.9)}
         >
-          <img src="/src/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%' }} />
+          <img src="/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%' }} />
         </button>
-        <PressButton onClick={onNearby} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
-          {t('btn_nearby_list')}
+        <PressButton onClick={onOpenHistory} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
+          {t('btn_view_history')}
         </PressButton>
       </div>
     </Screen>
@@ -1042,23 +1199,9 @@ function ResultCard({ dish, highlighted }: { dish: MatchedDish; highlighted?: bo
       boxShadow: highlighted ? '0 12px 16px rgba(244,137,36,0.15)' : '0 4px 16px rgba(0,0,0,0.05)',
     }}>
       <div style={{
-        flexShrink: 0, borderRadius: '16.5px', width: thumbSize, height: thumbSize,
-        backgroundColor: '#FFF1DD', overflow: 'hidden',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative', flexShrink: 0, borderRadius: '16.5px', width: thumbSize, height: thumbSize, overflow: 'hidden',
       }}>
-        <img
-          src={dish.image}
-          alt={name}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none';
-            const parent = (e.target as HTMLImageElement).parentElement!;
-            const span = document.createElement('span');
-            span.textContent = dish.emoji;
-            span.style.fontSize = 'clamp(36px, 9vw, 48px)';
-            parent.appendChild(span);
-          }}
-        />
+        <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(40px, 10vw, 52px)" />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(14px, 3.5vw, 18px)', lineHeight: 1.2, letterSpacing: '-0.01em' }}>
@@ -1067,10 +1210,10 @@ function ResultCard({ dish, highlighted }: { dish: MatchedDish; highlighted?: bo
         <div style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.65, fontSize: 'clamp(10px, 2.4vw, 12px)', marginTop: '3px', lineHeight: 1.3 }}>
           {desc}
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginTop: '6px' }}>
+        {dish.matchPercent != null && <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginTop: '6px' }}>
           <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#F48924', fontSize: 'clamp(10px, 2.3vw, 12px)' }}>{t('results_match_label')}</span>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#F48924', fontSize: 'clamp(22px, 5.5vw, 28px)', letterSpacing: '-0.01em' }}>{dish.matchPercent}%</span>
-        </div>
+          <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#F48924', fontSize: 'clamp(22px, 5.5vw, 28px)', letterSpacing: '-0.01em' }}><AnimatedPercent value={dish.matchPercent} /></span>
+        </div>}
       </div>
     </div>
   );
@@ -1078,7 +1221,14 @@ function ResultCard({ dish, highlighted }: { dish: MatchedDish; highlighted?: bo
 
 // ─── Tab screens ──────────────────────────────────────────────────────────────
 
-export function HistoryScreen({ history }: { history: HistoryItem[] }) {
+const HISTORY_MODE_KEYS: Record<HistoryMode, TranslationKey> = {
+  meal: 'history_mode_meal',
+  snack: 'history_mode_snack',
+  dessert: 'history_mode_dessert',
+  random: 'history_mode_random',
+};
+
+export function HistoryScreen({ history, dishById }: { history: HistoryItem[]; dishById: ReadonlyMap<string, Dish> }) {
   const { t, lang } = useLang();
   return (
     <Screen>
@@ -1094,7 +1244,7 @@ export function HistoryScreen({ history }: { history: HistoryItem[] }) {
       {history.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: PAD }}>
           <img
-            src="/src/assets/char-history.png"
+            src="/assets/char-history.png"
             alt=""
             style={{ width: 'clamp(224px, 80%, 308px)', objectFit: 'contain' }}
             onError={(e) => {
@@ -1115,40 +1265,31 @@ export function HistoryScreen({ history }: { history: HistoryItem[] }) {
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', padding: `12px ${PAD}`, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', alignContent: 'start' }}>
           {history.map((item) => {
-            const itemName = lang === 'uz' ? (item.name_uz || item.name) : item.name;
+            const dish = dishById.get(item.dishId);
+            const itemName = dish ? (lang === 'uz' ? dish.name_uz || dish.name : dish.name) : item.name;
             return (
               <div key={item.id} style={{ borderRadius: '33px', backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.05)', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ position: 'relative' }}>
-                  <div style={{ width: '100%', aspectRatio: '1', borderRadius: '16px', backgroundColor: '#FFF1DD', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <img
-                      src={item.image}
-                      alt={itemName}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        const parent = (e.target as HTMLImageElement).parentElement!;
-                        const span = document.createElement('span');
-                        span.textContent = item.emoji;
-                        span.style.fontSize = 'clamp(40px, 11vw, 56px)';
-                        parent.appendChild(span);
-                      }}
-                    />
+                  <div style={{ position: 'relative', width: '100%', aspectRatio: '1', borderRadius: '16px', overflow: 'hidden' }}>
+                    <DishImage image={dish?.image ?? item.image} emoji={dish?.emoji ?? '🍽️'} alt={itemName} emojiSize="clamp(44px, 12vw, 60px)" />
                   </div>
-                  <div style={{
-                    position: 'absolute', top: '8px', right: '8px',
-                    width: '44px', height: '44px', borderRadius: '100px', backgroundColor: '#F48924',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', lineHeight: 1,
-                  }}>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: 'clamp(14px, 4vw, 17px)', color: '#fff' }}>{item.matchPercent}</span>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '7px', color: '#fff', marginTop: '-2px' }}>%</span>
-                  </div>
+                  {item.matchPercent != null && (
+                    <div style={{
+                      position: 'absolute', top: '8px', right: '8px',
+                      width: '44px', height: '44px', borderRadius: '100px', backgroundColor: '#F48924',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', lineHeight: 1,
+                    }}>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: 'clamp(14px, 4vw, 17px)', color: '#fff' }}>{item.matchPercent}</span>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '7px', color: '#fff', marginTop: '-2px' }}>%</span>
+                    </div>
+                  )}
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(11px, 3vw, 14px)', lineHeight: 1.25, letterSpacing: '-0.01em' }}>
                     {itemName}
                   </div>
                   <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.55, fontSize: 'clamp(10px, 2.5vw, 13px)', marginTop: '4px' }}>
-                    {item.date}
+                    {item.mode ? `${t(HISTORY_MODE_KEYS[item.mode] ?? 'history_mode_meal')} · ` : ''}{item.date}
                   </div>
                 </div>
               </div>
@@ -1160,40 +1301,148 @@ export function HistoryScreen({ history }: { history: HistoryItem[] }) {
   );
 }
 
-export function MapScreen() {
+// ─── Places («Локации») and «Что рядом?» ─────────────────────────────────────
+
+function formatPrice(price: number, currency: string): string {
+  return `${new Intl.NumberFormat('ru-RU').format(price)} ${currency}`;
+}
+
+function LinkPill({ label, url, primary = false }: { label: string; url: string; primary?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={() => openExternalLink(url)}
+      style={{
+        flex: 1, minWidth: 0, height: '40px', borderRadius: '999px', border: 'none', cursor: 'pointer',
+        backgroundColor: primary ? '#F48924' : '#FFF1DD', color: primary ? '#fff' : '#6C2912',
+        fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 'clamp(12px, 3.3vw, 14px)',
+        transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+      }}
+      {...usePressScale(0.95)}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PlaceCard({ place, price, dishUrl }: { place: Place; price?: number | null; dishUrl?: string }) {
+  const { t } = useLang();
+  const links = [
+    dishUrl && isSafeUrl(dishUrl) ? { label: t('btn_open_dish'), url: dishUrl } : null,
+    isSafeUrl(place.express24_url) ? { label: t('btn_express24'), url: place.express24_url } : null,
+    isSafeUrl(place.yandex_eda_url) ? { label: t('btn_yandex_eda'), url: place.yandex_eda_url } : null,
+  ].filter((l): l is { label: string; url: string } => !!l);
+  return (
+    <div style={{ borderRadius: '25px', backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(149,104,33,0.09)', padding: 'clamp(14px, 4vw, 18px)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' }}>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(16px, 4.4vw, 19px)', letterSpacing: '-0.01em', minWidth: 0 }}>
+          {place.name}
+        </div>
+        {price != null && (
+          <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#F48924', fontSize: 'clamp(14px, 3.8vw, 16px)', whiteSpace: 'nowrap' }}>
+            {formatPrice(price, t('price_currency'))}
+          </div>
+        )}
+      </div>
+      {(place.district || place.address) && (
+        <div style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.65, fontSize: 'clamp(12px, 3.3vw, 14px)', lineHeight: 1.35 }}>
+          {[place.district, place.address].filter(Boolean).join(' · ')}
+        </div>
+      )}
+      {links.length > 0 && (
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {links.map((l, i) => <LinkPill key={l.url} label={l.label} url={l.url} primary={i === 0} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyPlaces({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: `0 ${PAD} 40px`, textAlign: 'center' }}>
+      <img
+        src="/assets/location.png"
+        alt=""
+        style={{ width: 'clamp(150px, 45vw, 200px)', height: 'auto', objectFit: 'contain' }}
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      />
+      <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(22px, 6vw, 28px)', letterSpacing: '-0.02em', marginTop: 'clamp(16px, 3dvh, 28px)', lineHeight: 1.2 }}>
+        {title}
+      </h2>
+      <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.6, fontSize: 'clamp(13px, 3.5vw, 16px)', marginTop: '10px', lineHeight: 1.4 }}>
+        {subtitle}
+      </p>
+    </div>
+  );
+}
+
+export function MapScreen({ places }: { places: readonly Place[] }) {
   const { t } = useLang();
   return (
     <Screen>
-      <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-        <OmNomLogo size="md" />
+      <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'clamp(12px, 2.5dvh, 20px)' }}>
+          <OmNomLogo size="md" />
+        </div>
+        {places.length > 0 && (
+          <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em' }}>
+            {t('map_title')}
+          </h2>
+        )}
       </div>
+      {places.length === 0 ? (
+        <div style={{
+          flex: 1,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          padding: `0 ${PAD} clamp(0px, 0dvh, 80px)`,
+          gap: 0,
+        }}>
+          <img
+            src="/assets/location.png"
+            alt=""
+            style={{ width: 'clamp(160px, 50vw, 220px)', height: 'auto', objectFit: 'contain' }}
+          />
+          <h2 style={{
+            fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
+            fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em',
+            textAlign: 'center', marginTop: 'clamp(20px, 4dvh, 36px)', marginBottom: 0,
+          }}>
+            {t('places_empty_title')}
+          </h2>
+          <p style={{
+            fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.6,
+            fontSize: 'clamp(13px, 3.5vw, 16px)', textAlign: 'center',
+            marginTop: 'clamp(8px, 1.5dvh, 12px)',
+          }}>
+            {t('places_empty_subtitle')}
+          </p>
+        </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto', padding: `12px ${PAD} 16px`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {places.map((p) => <PlaceCard key={p.id} place={p} />)}
+        </div>
+      )}
+    </Screen>
+  );
+}
 
-      <div style={{
-        flex: 1,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: `0 ${PAD} clamp(0px, 0dvh, 80px)`,
-        gap: 0,
-      }}>
-        <img
-          src="/src/assets/location.png"
-          alt=""
-          style={{ width: 'clamp(160px, 50vw, 220px)', height: 'auto', objectFit: 'contain' }}
-        />
-        <h2 style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
-          fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em',
-          textAlign: 'center', marginTop: 'clamp(20px, 4dvh, 36px)', marginBottom: 0,
-        }}>
-          {t('map_title')}
-        </h2>
-        <p style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.6,
-          fontSize: 'clamp(13px, 3.5vw, 16px)', textAlign: 'center',
-          marginTop: 'clamp(8px, 1.5dvh, 12px)',
-        }}>
-          {t('map_subtitle')}
-        </p>
+export function NearbyScreen({ dish, offers, onBack }: { dish: Dish; offers: readonly PlaceOffer[]; onBack(): void }) {
+  const { t, lang } = useLang();
+  const dishName = lang === 'uz' ? dish.name_uz || dish.name : dish.name;
+  return (
+    <Screen>
+      <SubPageHeader title={t('nearby_title')} onBack={onBack} />
+      <div style={{ padding: `8px ${PAD} 0`, fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', opacity: 0.7, fontSize: 'clamp(14px, 3.8vw, 16px)' }}>
+        {dish.emoji} {dishName}
       </div>
+      {offers.length === 0 ? (
+        <EmptyPlaces title={t('nearby_empty_title')} subtitle={t('nearby_empty_subtitle')} />
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto', padding: `16px ${PAD}`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {offers.map((o) => <PlaceCard key={o.place.id} place={o.place} price={o.price} dishUrl={o.url} />)}
+        </div>
+      )}
     </Screen>
   );
 }
@@ -1203,15 +1452,17 @@ export function MapScreen() {
 const DIVIDER = '1px solid rgba(108, 41, 18, 0.1)';
 
 const PROFILE_ITEMS = [
-  { id: 'diet',   icon: '/src/assets/icons/settings-allergic.svg' },
-  { id: 'lang',   icon: '/src/assets/icons/settings-language.svg' },
-  { id: 'notify', icon: '/src/assets/icons/settings-notification.svg' },
-  { id: 'share',  icon: '/src/assets/icons/settings-share.svg' },
+  { id: 'diet',   icon: '/assets/icons/settings-allergic.svg' },
+  { id: 'lang',   icon: '/assets/icons/settings-language.svg' },
+  { id: 'notify', icon: '/assets/icons/settings-notification.svg' },
+  { id: 'share',  icon: '/assets/icons/settings-share.svg' },
+  { id: 'clear-history', icon: 'trash' },
 ] as const;
 
 type ProfileItemId = typeof PROFILE_ITEMS[number]['id'];
 
 const PROFILE_LABEL_KEYS: Record<ProfileItemId, TranslationKey> = {
+  'clear-history': 'profile_clear_history',
   diet:   'profile_diet',
   lang:   'profile_lang',
   notify: 'profile_notify',
@@ -1247,10 +1498,7 @@ function SubPageHeader({ title, onBack }: { title: string; onBack(): void }) {
           padding: '4px', flexShrink: 0, display: 'flex', alignItems: 'center',
           transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
-        onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
-        onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-        onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.88)')}
-        onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
+        {...usePressScale(0.88)}
       >
         <IconArrowLeft />
       </button>
@@ -1293,8 +1541,7 @@ function SelectRow({ label, checked, onToggle, divider, radio = false }: {
   );
 }
 
-function CopiedToast() {
-  const { t } = useLang();
+export function Toast({ message }: { message: string }) {
   return (
     <div style={{
       position: 'fixed', bottom: '110px', left: '50%', transform: 'translateX(-50%)',
@@ -1304,12 +1551,14 @@ function CopiedToast() {
       zIndex: 1000, pointerEvents: 'none', whiteSpace: 'nowrap',
       animation: 'screenFadeIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both',
     }}>
-      {t('toast_copied')}
+      {message}
     </div>
   );
 }
 
 function ProfileUser() {
+  const { t } = useLang();
+  const { name, username } = getTelegramUserInfo();
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 'clamp(12px, 3.5vw, 16px)',
@@ -1323,7 +1572,7 @@ function ProfileUser() {
         fontSize: '28px', overflow: 'hidden',
       }}>
         <img
-          src="/src/assets/profile-icon.png" alt=""
+          src="/assets/profile-icon.png" alt=""
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none';
@@ -1335,23 +1584,33 @@ function ProfileUser() {
       </div>
       <div>
         <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#3D1A00', fontSize: 'clamp(16px, 4.5vw, 20px)', letterSpacing: '-0.01em' }}>
-          Абарин Кортавин
+          {name || t('profile_guest_name')}
         </div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.5, fontSize: 'clamp(12px, 3vw, 14px)', marginTop: '3px' }}>
-          @abarinuz
-        </div>
+        {username && (
+          <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.5, fontSize: 'clamp(12px, 3vw, 14px)', marginTop: '3px' }}>
+            {username}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-type ProfileSubPage = 'none' | 'diet' | 'language';
+type ProfileSubPage = 'none' | 'diet' | 'language' | 'clear-history';
 
-export function ProfileScreen({ onSubPageChange }: { onSubPageChange?: (inSubPage: boolean) => void }) {
+export function ProfileScreen({ onSubPageChange, onClearHistory }: {
+  onSubPageChange?: (inSubPage: boolean) => void;
+  onClearHistory?: () => Promise<void>;
+}) {
   const { lang, setLang, t } = useLang();
   const [subPage, setSubPage] = useState<ProfileSubPage>('none');
   const [diet, setDiet] = useState<string[]>([]);
-  const [showCopied, setShowCopied] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 2200);
+  };
 
   useEffect(() => {
     loadDiet(d => setDiet(d));
@@ -1374,10 +1633,15 @@ export function ProfileScreen({ onSubPageChange }: { onSubPageChange?: (inSubPag
       tg.openTelegramLink(`https://t.me/share/url?url=${url}&text=${text}`);
     } else {
       navigator.clipboard?.writeText('https://t.me/omnom_bot').then(() => {
-        setShowCopied(true);
-        setTimeout(() => setShowCopied(false), 2200);
+        showToast(t('toast_copied'));
       }).catch(() => {});
     }
+  };
+
+  const handleConfirmClearHistory = async () => {
+    await onClearHistory?.();
+    goToSubPage('none');
+    showToast(t('history_cleared_toast'));
   };
 
   const langLabel = lang === 'uz' ? 'Ozbekcha' : 'Русский';
@@ -1416,6 +1680,7 @@ export function ProfileScreen({ onSubPageChange }: { onSubPageChange?: (inSubPag
                         if (item.id === 'diet') goToSubPage('diet');
                         else if (item.id === 'lang') goToSubPage('language');
                         else if (item.id === 'share') handleShare();
+                        else if (item.id === 'clear-history') goToSubPage('clear-history');
                       }}
                       disabled={isNotify}
                       style={{
@@ -1427,7 +1692,9 @@ export function ProfileScreen({ onSubPageChange }: { onSubPageChange?: (inSubPag
                         textAlign: 'left', opacity: isNotify ? 0.45 : 1,
                       }}
                     >
-                      <img src={item.icon} alt="" style={{ width: '22px', height: '22px', flexShrink: 0, objectFit: 'contain' }} />
+                      {item.icon === 'trash'
+                        ? <IconTrash />
+                        : <img src={item.icon} alt="" style={{ width: '22px', height: '22px', flexShrink: 0, objectFit: 'contain' }} />}
                       <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#3D1A00', fontSize: 'clamp(14px, 3.5vw, 16px)' }}>
                         {t(PROFILE_LABEL_KEYS[item.id])}
                       </span>
@@ -1491,9 +1758,30 @@ export function ProfileScreen({ onSubPageChange }: { onSubPageChange?: (inSubPag
             </div>
           </>
         )}
+
+        {/* ── Clear history sub-page ───────────────────────────────────────── */}
+        {subPage === 'clear-history' && (
+          <>
+            <SubPageHeader title={t('profile_clear_history')} onBack={() => goToSubPage('none')} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: PAD, textAlign: 'center' }}>
+              <span style={{ fontSize: '52px' }}>🗑️</span>
+              <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912', fontSize: 'clamp(18px, 5vw, 22px)', lineHeight: 1.3, letterSpacing: '-0.02em', margin: 0, maxWidth: '300px' }}>
+                {t('clear_history_confirm_title')}
+              </p>
+              <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, color: '#6C2912', opacity: 0.6, fontSize: 'clamp(13px, 3.5vw, 15px)', lineHeight: 1.5, margin: 0, maxWidth: '300px' }}>
+                {t('clear_history_confirm_subtitle')}
+              </p>
+            </div>
+            <div style={{ flexShrink: 0, padding: `12px ${PAD} calc(12px + env(safe-area-inset-bottom, 0px))` }}>
+              <PressButton onClick={handleConfirmClearHistory} bg="#E8395A" color="#fff" shadow="0 12px 28px rgba(232,57,90,0.32)">
+                {t('btn_clear_history')}
+              </PressButton>
+            </div>
+          </>
+        )}
       </div>
 
-      {showCopied && <CopiedToast />}
+      {toastMessage && <Toast message={toastMessage} />}
     </Screen>
   );
 }
