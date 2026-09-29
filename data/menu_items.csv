@@ -1,0 +1,4 @@
+# Какие блюда из omnom_dishes.csv подают в каком заведении из places.csv.
+# Строки с id, начинающимся на "example-", в базу не попадают. price — цена в сумах целым числом; url — прямая ссылка на блюдо (необязательно).
+id,place_id,dish_id,price,url
+example-item,example-place,plov-01,45000,
