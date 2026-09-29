@@ -67,9 +67,10 @@ export type Lookahead = { isLastQuestion: boolean; remainingEstimate: number };
 
 export type Rng = () => number;
 
-// Bump on any change to scoring, question selection or stop conditions, so sessions
-// recorded under different rules are never averaged together.
-export const ALGORITHM_VERSION = 'v0.3';
+// Bump on any change to scoring, question selection, stop conditions — or to the wording of
+// a question, since rewording changes what an answer means. Sessions recorded under
+// different rules are then never averaged together.
+export const ALGORITHM_VERSION = 'v0.4';
 
 export const MAX_SWIPES = 9;
 export const TOP3_STOP_SHARE = 0.7;
