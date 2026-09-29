@@ -17,6 +17,10 @@ export type Dish = {
   image: string;
   allergens: string[];
   dishType: DishType;
+  // How likely a person is to mean this dish when nothing distinguishes it from a neighbour:
+  // plov and mashkichiri share a trait vector, but one of them is what people actually order.
+  // Used only to break ties — it never moves a dish past one the answers ranked higher.
+  prominence: number;
   // Share of real players who answered «Да» for this dish, per tag (npm run calibrate). Used only with USE_CALIBRATED.
   calibration: Readonly<Record<string, number>>;
   [tag: string]: unknown;
@@ -65,12 +69,28 @@ export type Rng = () => number;
 
 // Bump on any change to scoring, question selection or stop conditions, so sessions
 // recorded under different rules are never averaged together.
-export const ALGORITHM_VERSION = 'v0.2';
+export const ALGORITHM_VERSION = 'v0.3';
 
 export const MAX_SWIPES = 9;
 export const TOP3_STOP_SHARE = 0.7;
+// Window a question must fall in among the current leaders.
 export const SHARE_MIN = 0.15;
 export const SHARE_MAX = 0.85;
+// Catalogue-wide guard: only drops questions that say nothing about anyone.
+export const GLOBAL_SHARE_MIN = 0.02;
+export const GLOBAL_SHARE_MAX = 0.98;
+// How many dishes count as "still in contention" when judging a question.
+export const LEADER_COUNT = 8;
+// A dish nobody marked up is neither famous nor obscure.
+export const DEFAULT_PROMINENCE = 0.5;
+// Question value blends how well it splits the leaders with how well it splits the whole
+// pool (spec §9). Pure leader-splitting reaches rare defining traits but loses sight of the
+// rest of the catalogue; pure global splitting never asks «рис?» in a cuisine where only
+// 11% of dishes have rice — and so can never single out plov.
+// 0.5 chosen by sweeping 1.0 / 0.7 / 0.5 / 0.3 through npm run validate: it left the most
+// of the catalogue reachable (82 dishes that can never be shown, against 116 before)
+// without losing per-cuisine accuracy. Change it here to re-run that sweep.
+export const LOCAL_WEIGHT = 0.5;
 const PRIORITY_TIE = 0.03;
 const TOP_N = 3;
 
@@ -124,6 +144,7 @@ export function normalizeDish(raw: Record<string, unknown>): Dish {
     image: str(raw.image),
     allergens: parseAllergens(raw.allergens),
     dishType: dishType === 'side' || dishType === 'dessert' ? dishType : 'main',
+    prominence: raw.prominence == null || str(raw.prominence) === '' ? DEFAULT_PROMINENCE : clamp01(Number(raw.prominence)),
     calibration: parseCalibration(raw.p_yes_calibrated),
   };
 }
@@ -307,26 +328,51 @@ function totalWeight(session: Session): number {
 }
 
 export function yesShare(session: Session, tag: string, appliesTo = 'all'): number {
+  return shareOver(session, tag, appliesTo, session.candidates.map((_, i) => i));
+}
+
+function shareOver(session: Session, tag: string, appliesTo: string, indexes: readonly number[]): number {
   let total = 0;
   let yes = 0;
-  session.candidates.forEach((d, i) => {
-    if (!appliesToDish(appliesTo, d, session.mode)) return;
+  for (const i of indexes) {
+    const d = session.candidates[i];
+    if (!appliesToDish(appliesTo, d, session.mode)) continue;
     const w = session.weights[i];
     total += w;
     yes += w * traitValue(d, tag);
-  });
+  }
   return total > 0 ? yes / total : 0;
 }
 
+// The dishes still in contention. A question is worth asking when it splits *these*,
+// even if it barely splits the catalogue: «рис?» divides plov from the stews around it
+// while only 11% of the cuisine has rice, so a catalogue-wide share would discard it.
+function leaderIndexes(session: Session): number[] {
+  return session.candidates
+    .map((_, i) => i)
+    .sort((a, b) => session.weights[b] - session.weights[a])
+    .slice(0, LEADER_COUNT);
+}
+
 function informativeQuestions(questions: readonly Question[], session: Session): Array<{ q: Question; dist: number }> {
-  const options: Array<{ q: Question; dist: number }> = [];
+  const leaders = leaderIndexes(session);
+  const byLeaders: Array<{ q: Question; dist: number }> = [];
+  const byPool: Array<{ q: Question; dist: number }> = [];
   for (const q of questions) {
     if (!isEligible(q, session)) continue;
-    const share = yesShare(session, q.tag, q.applies_to);
-    if (share < SHARE_MIN || share > SHARE_MAX) continue;
-    options.push({ q, dist: Math.abs(share - 0.5) });
+    // A question nobody in the whole pool would answer differently is noise, whatever the
+    // leaders look like; the catalogue-wide guard is deliberately loose.
+    const global = yesShare(session, q.tag, q.applies_to);
+    if (global < GLOBAL_SHARE_MIN || global > GLOBAL_SHARE_MAX) continue;
+    const local = shareOver(session, q.tag, q.applies_to, leaders);
+    const dist = LOCAL_WEIGHT * Math.abs(local - 0.5) + (1 - LOCAL_WEIGHT) * Math.abs(global - 0.5);
+    if (local >= SHARE_MIN && local <= SHARE_MAX) byLeaders.push({ q, dist });
+    else if (global >= SHARE_MIN && global <= SHARE_MAX) byPool.push({ q, dist });
   }
-  return options;
+  // Splitting the leaders is what shortens the quiz, so those questions come first. But when
+  // the leaders agree on everything, falling back to the pool beats ending the quiz on a
+  // single answer — which is how «жирное?» alone used to decide the whole session.
+  return byLeaders.length > 0 ? byLeaders : byPool;
 }
 
 export function pickNextQuestion(questions: readonly Question[], session: Session, excludeIds: readonly string[] = []): Question | null {
@@ -421,7 +467,13 @@ type Ranked = { dish: Dish; w: number; pct: number | null };
 function rank(candidates: readonly Dish[], weights: readonly number[], log: readonly LogEntry[], mode: Mode): Ranked[] {
   return candidates
     .map((dish, i) => ({ dish, w: weights[i], pct: matchPercent(dish, log, mode) }))
-    .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1) || b.w - a.w || a.dish.id.localeCompare(b.dish.id));
+    .sort((a, b) =>
+      (b.pct ?? -1) - (a.pct ?? -1)
+      || b.w - a.w
+      // Dishes the answers cannot separate are ordered by what people actually mean,
+      // not by whose id sorts first — that used to hand plov's slot to mashkichiri.
+      || b.dish.prominence - a.dish.prominence
+      || a.dish.id.localeCompare(b.dish.id));
 }
 
 function pickDiverse(pool: Ranked[], n: number, fallbackPerCuisine: number): Ranked[] {

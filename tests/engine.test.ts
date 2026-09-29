@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ANY_CUISINE, applyAnswer, conditionMet, getCandidates, getLookahead, isEligible, isFinished, matchPercent, multiplier,
   nextProgress, normalizeDish, normalizeQuestion, pickNextQuestion, pickRandomDish, progressValue, questionLimit, rankResults,
-  RESULT_MIN_PERCENT, allCuisinesResults, appliesToDish, answerFactor, pYes, TAG_P_YES, traitValue, USE_CALIBRATED, shouldStop, stackDepth, startSession, tagValue, top3Share, undoLast,
+  RESULT_MIN_PERCENT, SHARE_MIN, yesShare, allCuisinesResults, appliesToDish, answerFactor, pYes, TAG_P_YES, traitValue, USE_CALIBRATED, shouldStop, stackDepth, startSession, tagValue, top3Share, undoLast,
 } from '../src/logic/engine.ts';
 import type { Dish, Question, Session } from '../src/logic/engine.ts';
 import { loadDishes, loadQuestions, loadRawDessertTags } from '../scripts/lib/csvData.ts';
@@ -132,30 +132,52 @@ test('applies_to only restricts meal with a concrete cuisine; mode must match', 
 });
 
 test('pickNextQuestion: 15–85% window, closest to 50%, priority within 3%', () => {
-  const dishes = Array.from({ length: 20 }, (_, i) => dish({
-    a: i < 2 ? 'yes' : 'no',   // 10% → skipped
-    b: i < 18 ? 'yes' : 'no',  // 90% → skipped
-    c: i < 7 ? 'yes' : 'no',   // 35%
-    d: i < 9 ? 'yes' : 'no',   // 45%
-    e: i < 10 ? 'yes' : 'no',  // 50%
+  // Eight dishes, all still equally likely, so the leaders are the whole pool.
+  const dishes = Array.from({ length: 8 }, (_, i) => dish({
+    a: i < 1 ? 'yes' : 'no',   // 12.5% → skipped
+    b: i < 7 ? 'yes' : 'no',   // 87.5% → skipped
+    c: i < 3 ? 'yes' : 'no',   // 37.5%
+    e: i < 4 ? 'yes' : 'no',   // 50%
   }));
   const s = startSession(dishes, 'meal', ANY_CUISINE, []);
   const qa = question({ tag: 'a', priority: 1 });
   const qb = question({ tag: 'b', priority: 1 });
   const qc = question({ tag: 'c', priority: 1 });
-  const qd = question({ tag: 'd', priority: 1 });
   const qe = question({ tag: 'e', priority: 5 });
 
-  assert.equal(pickNextQuestion([qa, qb], s), null);
+  assert.equal(pickNextQuestion([qa, qb], s), null, 'nothing informative → no question');
   assert.equal(pickNextQuestion([qa, qb, qc], s)?.id, qc.id);
-  // e is exactly 50% but d (45%) is 5% away → e wins despite worse priority
-  assert.equal(pickNextQuestion([qc, qd, qe], s)?.id, qe.id);
-  // within 3%: lower priority wins
-  const qe2 = question({ tag: 'e', priority: 5 });
-  const almost = Array.from({ length: 100 }, (_, i) => dish({ e: i < 50 ? 'yes' : 'no', f: i < 52 ? 'yes' : 'no' }));
+  assert.equal(pickNextQuestion([qc, qe], s)?.id, qe.id, 'exactly 50% beats 37.5%');
+  assert.equal(pickNextQuestion([qc, qe], applyAnswer(s, qe, 'any'))?.id, qc.id, 'answered questions drop out');
+
+  // Equal shares → the lower priority number wins.
+  const even = Array.from({ length: 8 }, (_, i) => dish({ e: i < 4 ? 'yes' : 'no', f: i < 4 ? 'yes' : 'no' }));
   const qf = question({ tag: 'f', priority: 1 });
-  assert.equal(pickNextQuestion([qe2, qf], startSession(almost, 'meal', ANY_CUISINE, []))?.id, qf.id);
-  assert.equal(pickNextQuestion([qc, qe], applyAnswer(s, qe, 'any'))?.id, qc.id);
+  assert.equal(pickNextQuestion([qe, qf], startSession(even, 'meal', ANY_CUISINE, []))?.id, qf.id);
+});
+
+test('pickNextQuestion asks a question that only splits the leaders, and falls back to the pool', () => {
+  // 4 dishes of 100 are hot, and 2 of those 4 carry a trait almost nothing else has.
+  const pool = Array.from({ length: 100 }, (_, i) => dish({
+    isHot: i < 4 ? 'yes' : 'no',
+    rare: i < 2 ? 'yes' : 'no',
+    common: i % 2 === 0 ? 'yes' : 'no',
+  }));
+  const hot = question({ tag: 'isHot', priority: 1 });
+  const rare = question({ tag: 'rare', priority: 1 });
+  const common = question({ tag: 'common', priority: 1 });
+  const s = applyAnswer(startSession(pool, 'meal', ANY_CUISINE, []), hot, 'yes');
+
+  // Across the weighted pool «rare» is 13.6% — under the window, and previously discarded.
+  // Among the leaders it splits them almost evenly, which is the only thing that can tell
+  // the front-runners apart. This is the plov case: rice is rare, and decisive.
+  assert.ok(yesShare(s, 'rare') < SHARE_MIN);
+  assert.equal(pickNextQuestion([rare], s)?.id, rare.id);
+
+  // When the leaders agree on everything, a question that splits the pool is still better
+  // than ending the quiz — otherwise one answer would decide the whole session.
+  const agreed = applyAnswer(startSession(pool, 'meal', ANY_CUISINE, []), rare, 'yes');
+  assert.ok(pickNextQuestion([common], agreed) !== null);
 });
 
 test('any-valued dishes count half toward the yes share', () => {
