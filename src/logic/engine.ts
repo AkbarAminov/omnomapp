@@ -70,7 +70,7 @@ export type Rng = () => number;
 // Bump on any change to scoring, question selection, stop conditions — or to the wording of
 // a question, since rewording changes what an answer means. Sessions recorded under
 // different rules are then never averaged together.
-export const ALGORITHM_VERSION = 'v0.4';
+export const ALGORITHM_VERSION = 'v0.5';
 
 export const MAX_SWIPES = 9;
 export const TOP3_STOP_SHARE = 0.7;
@@ -84,6 +84,19 @@ export const GLOBAL_SHARE_MAX = 0.98;
 export const LEADER_COUNT = 8;
 // A dish nobody marked up is neither famous nor obscure.
 export const DEFAULT_PROMINENCE = 0.5;
+
+// Phase A / phase B (spec §6–7). The split already lives in the data as question_group:
+// «Ощущения» is the state you are in, «Направление» the cuisine you lean towards, and for
+// desserts «Вкус» (шоколад / фрукты / сливки) is the craving itself. «Основа», «Форма»,
+// «Способ» and «Формат» describe the dish, not the want. Asking about the craving first is
+// a UX decision, not a mathematical one — it costs information, so the rule is soft: it only
+// picks among questions that already passed the informativeness gate.
+const CRAVING_GROUPS: ReadonlySet<string> = new Set(['Ощущения', 'Направление', 'Вкус']);
+export const CRAVING_FIRST = 2;
+
+export function isCravingQuestion(q: Question): boolean {
+  return CRAVING_GROUPS.has(q.question_group);
+}
 // Question value blends how well it splits the leaders with how well it splits the whole
 // pool (spec §9). Pure leader-splitting reaches rare defining traits but loses sight of the
 // rest of the catalogue; pure global splitting never asks «рис?» in a cuisine where only
@@ -373,7 +386,18 @@ function informativeQuestions(questions: readonly Question[], session: Session):
   // Splitting the leaders is what shortens the quiz, so those questions come first. But when
   // the leaders agree on everything, falling back to the pool beats ending the quiz on a
   // single answer — which is how «жирное?» alone used to decide the whole session.
-  return byLeaders.length > 0 ? byLeaders : byPool;
+  // Открываем разговор с того, чего человеку хочется, а не с состава блюда — но только
+  // если такой вопрос вообще что-то разделяет. «Неважно» не тратит эту квоту: она
+  // считается по информативным ответам. Ищем желание в обоих списках: вопрос про
+  // состояние стоит задать, даже если лидеров он делит хуже, чем вопрос про состав.
+  // Ищем желание только среди вопросов, которые и так хорошо делят лидеров: тянуть сюда
+  // вопрос из запасного списка ради «правильного» порядка стоило 6 пунктов точности на
+  // персонах и лишних полвопроса, а выигрыш от него — гипотеза, которую ещё не подтвердили
+  // живые сессии.
+  const tier = byLeaders.length > 0 ? byLeaders : byPool;
+  if (session.answered >= CRAVING_FIRST) return tier;
+  const craving = tier.filter((o) => isCravingQuestion(o.q));
+  return craving.length > 0 ? craving : tier;
 }
 
 export function pickNextQuestion(questions: readonly Question[], session: Session, excludeIds: readonly string[] = []): Question | null {

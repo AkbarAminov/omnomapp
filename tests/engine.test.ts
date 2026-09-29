@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ANY_CUISINE, applyAnswer, conditionMet, getCandidates, getLookahead, isEligible, isFinished, matchPercent, multiplier,
   nextProgress, normalizeDish, normalizeQuestion, pickNextQuestion, pickRandomDish, progressValue, questionLimit, rankResults,
-  RESULT_MIN_PERCENT, SHARE_MIN, yesShare, allCuisinesResults, appliesToDish, answerFactor, pYes, TAG_P_YES, traitValue, USE_CALIBRATED, shouldStop, stackDepth, startSession, tagValue, top3Share, undoLast,
+  RESULT_MIN_PERCENT, SHARE_MIN, yesShare, allCuisinesResults, CRAVING_FIRST, isCravingQuestion, appliesToDish, answerFactor, pYes, TAG_P_YES, traitValue, USE_CALIBRATED, shouldStop, stackDepth, startSession, tagValue, top3Share, undoLast,
 } from '../src/logic/engine.ts';
 import type { Dish, Question, Session } from '../src/logic/engine.ts';
 import { loadDishes, loadQuestions, loadRawDessertTags } from '../scripts/lib/csvData.ts';
@@ -514,6 +514,109 @@ test('edge: percent is never NaN, negative or above 100', () => {
 });
 
 // ── Stage 9: p_yes model and calibration flag ────────────────────────────────
+
+// ── Этап 27: краевые случаи ──────────────────────────────────────────────────
+
+test('edge: противоречивые ответы — результат есть, но никто не выглядит идеальным', () => {
+  const pool = [
+    dish({ id: 'soup', isSoup: 'yes', isFried: 'no' }),
+    dish({ id: 'fried', isSoup: 'no', isFried: 'yes' }),
+    dish({ id: 'neither', isSoup: 'no', isFried: 'no' }),
+  ];
+  let s = startSession(pool, 'meal', 'asian', []);
+  // Суп и фритюр одновременно: ни одно блюдо не может согласиться с обоими ответами.
+  s = applyAnswer(s, question({ tag: 'isSoup' }), 'yes');
+  s = applyAnswer(s, question({ tag: 'isFried' }), 'yes');
+  const r = rankResults(s);
+  assert.ok(r.dishes.length >= 1, 'человек всё равно получает ответ');
+  for (const d of r.dishes) {
+    assert.ok(d.matchPercent !== null && d.matchPercent <= 50,
+      `противоречие не должно давать высокий процент, а вышло ${d.matchPercent}`);
+  }
+});
+
+test('edge: одинаковые блюда — ничья устойчива и показывается ровно три', () => {
+  const pool = Array.from({ length: 6 }, () => dish({ isHot: 'yes', hasMeat: 'yes' }));
+  let s = startSession(pool, 'meal', 'asian', []);
+  s = applyAnswer(s, question({ tag: 'isHot' }), 'yes');
+  const r = rankResults(s);
+  assert.equal(r.dishes.length, 3, 'выдача не раздувается при полной ничьей');
+  assert.equal(new Set(r.dishes.map((d) => d.matchPercent)).size, 1, 'у неразличимых блюд один процент');
+  assert.deepEqual(rankResults(s).dishes.map((d) => d.id), r.dishes.map((d) => d.id), 'порядок повторяем');
+});
+
+test('edge: выбранная кухня не подходит — честный «нет совпадения», а лучшее находится в другой', () => {
+  const qs = [question({ tag: 'isSoup' }), question({ tag: 'hasRice' })];
+  const pool = [
+    dish({ id: 'own', cuisine: 'slavic', isSoup: 'no', hasRice: 'no' }),
+    dish({ id: 'foreign', cuisine: 'asian', isSoup: 'yes', hasRice: 'yes' }),
+  ];
+  let s = startSession(pool, 'meal', 'slavic', []);
+  for (const q of qs) s = applyAnswer(s, q, 'yes');
+  const own = rankResults(s);
+  assert.equal(own.exact, false, 'внутри кухни ничего не дотянуло до порога');
+  assert.equal(own.dishes[0].id, 'own', 'но человек всё равно видит лучшее из выбранной кухни');
+
+  const all = allCuisinesResults(pool, s.log, []);
+  assert.equal(all.dishes[0].id, 'foreign', 'во «всех кухнях» находится подходящее блюдо');
+  assert.ok(all.dishes[0].matchPercent! > own.dishes[0].matchPercent!, 'и оно объективно ближе');
+});
+
+test('edge: аллерген выбивает большую часть каталога', () => {
+  const pool = [
+    ...Array.from({ length: 18 }, () => dish({ allergens: ['nuts'], isHot: 'yes' })),
+    dish({ id: 'safe1', allergens: [], isHot: 'yes' }),
+    dish({ id: 'safe2', allergens: [], isHot: 'no' }),
+  ];
+  const s = startSession(pool, 'meal', 'asian', ['nuts']);
+  assert.deepEqual(s.candidates.map((d) => d.id), ['safe1', 'safe2']);
+  const done = applyAnswer(s, question({ tag: 'isHot' }), 'yes');
+  const shown = rankResults(done).dishes;
+  assert.ok(shown.length > 0, 'из двух оставшихся блюд ответ всё равно собирается');
+  assert.ok(shown.every((d) => d.allergens.length === 0), 'аллерген не просачивается в выдачу');
+  assert.ok(allCuisinesResults(pool, done.log, ['nuts']).dishes.every((d) => d.allergens.length === 0),
+    'и во «все кухни» тоже');
+});
+
+test('edge: новый тест не тянет за собой предыдущий', () => {
+  const pool = [dish({ isHot: 'yes' }), dish({ isHot: 'no' })];
+  const first = applyAnswer(startSession(pool, 'meal', 'asian', []), question({ tag: 'isHot' }), 'yes');
+  const second = startSession(pool, 'meal', 'asian', []);
+  assert.deepEqual(second.weights, [1, 1]);
+  assert.deepEqual(second.log, []);
+  assert.equal(second.answered, 0);
+  assert.equal(second.swipes, 0);
+  assert.notDeepEqual(first.weights, second.weights);
+});
+
+// ── Этап 6: сначала желание, потом состав ────────────────────────────────────
+
+test('первые вопросы — про желание, пока такой вопрос что-то разделяет', () => {
+  // Три независимых признака, каждый делит пул ровно пополам.
+  const pool = Array.from({ length: 8 }, (_, i) => dish({
+    isHeavy: i & 1 ? 'yes' : 'no',
+    isSpicy: i & 2 ? 'yes' : 'no',
+    hasRice: i & 4 ? 'yes' : 'no',
+  }));
+  const heavy = question({ tag: 'isHeavy', question_group: 'Ощущения' });
+  const spicy = question({ tag: 'isSpicy', question_group: 'Ощущения' });
+  const rice = question({ tag: 'hasRice', question_group: 'Форма' });
+  assert.ok(isCravingQuestion(heavy) && !isCravingQuestion(rice));
+
+  const qs = [rice, heavy, spicy];
+  let s = startSession(pool, 'meal', 'asian', []);
+  assert.equal(pickNextQuestion(qs, s)?.tag, 'isHeavy', 'при равной информативности желание вперёд');
+
+  // «Неважно» не тратит квоту: она считается по информативным ответам.
+  const skipped = applyAnswer(s, heavy, 'any');
+  assert.equal(skipped.answered, 0);
+  assert.equal(pickNextQuestion(qs, skipped)?.tag, 'isSpicy', 'снова вопрос про желание');
+
+  s = applyAnswer(s, heavy, 'yes');
+  s = applyAnswer(s, spicy, 'yes');
+  assert.equal(s.answered, CRAVING_FIRST);
+  assert.equal(pickNextQuestion(qs, s)?.tag, 'hasRice', 'квота исчерпана — дальше по информативности');
+});
 
 test('p_yes model reproduces the 0.9 / 0.1 / 0.5 weights exactly', () => {
   for (const tag of ['yes', 'no', 'any'] as const) {
