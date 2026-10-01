@@ -32,10 +32,9 @@ const ru = {
   answer_yes: 'Да',
 
   // ── Quiz progress ────────────────────────────────────────────────────────────
-  quiz_question_n: 'Вопрос {n}',
-  quiz_remaining:  '≈ ещё {k}',
-  quiz_last:       'Последний вопрос',
   quiz_searching:  'Будем искать!',
+  quiz_almost:     'Уже близко',
+  quiz_last_one:   'Последний вопрос',
 
 
   // ── Loading screen ───────────────────────────────────────────────────────────
@@ -89,7 +88,7 @@ const ru = {
   profile_diet:   'Диетические ограничения',
   profile_lang:   'Язык',
   profile_notify: 'Уведомления',
-  profile_share:  'Поделиться результатом',
+  profile_share:  'Рассказать о приложении',
   profile_clear_history: 'Очистить историю',
   clear_history_confirm_title:    'Очистить всю историю?',
   clear_history_confirm_subtitle: 'Это действие нельзя отменить — все блюда, что попадались раньше, исчезнут из списка.',
@@ -109,22 +108,30 @@ const ru = {
   btn_try_other:       'Выбрать заново',
 
   // ── Или / Или ────────────────────────────────────────────────────────────────
-  battle_title:        'ИЛИ / ИЛИ',
-  battle_subtitle:     'Не знаешь, чего хочется?\nВыбирай между двумя блюдами —\nмы найдём победителя на сегодня',
-  battle_start:        'Начать',
-  battle_hint:         '6 быстрых выборов',
-  battle_question:     'Что бы ты выбрал прямо сейчас?',
+  battle_tutorial_title: 'Выбирай, что хочется больше',
+  battle_tutorial_sub:   'Оставляй фаворита — мы будем подбирать ему новых соперников. А если блюдо не хочется совсем, смахни его влево.',
+  battle_tutorial_cta:   'Понятно',
+  battle_question:     'Что хочется сейчас?',
   battle_or:           'или',
+  battle_reject:       'сегодня нет',
   battle_final:        'Финал',
   battle_result_title: 'Твой выбор на сегодня',
   battle_wins:         'побед из',
+  battle_beat:         'Обошёл:',
+  battle_beat_more:    'и ещё',
+  battle_similar:      'Похоже на твой выбор',
   battle_again:        'Сыграть ещё раз',
-  battle_home:         'На главную',
+  btn_share_result:    'Поделиться',
+  share_card_caption:  'Мой выбор на сегодня',
+  toast_share_saved:   'Картинка сохранена',
+  toast_share_failed:  'Не получилось поделиться',
   battle_empty_title:  'Пока не из чего выбирать',
   battle_empty_sub:    'Ограничения в профиле убрали почти все блюда',
 
   // ── Common ───────────────────────────────────────────────────────────────────
   btn_apply:    'Применить',
+  btn_close:    'Закрыть',
+  btn_cancel:   'Отмена',
   toast_copied: 'Ссылка скопирована',
   toast_soon:   'Скоро',
   share_text:   'Нашёл что поесть в OMNOM!',
@@ -161,10 +168,9 @@ const uz: Record<keyof typeof ru, string> = {
   answer_yes: 'Ha',
 
   // ── Quiz progress ────────────────────────────────────────────────────────────
-  quiz_question_n: '{n}-savol',
-  quiz_remaining:  '≈ yana {k}',
-  quiz_last:       'Oxirgi savol',
   quiz_searching:  'Qidiramiz!',
+  quiz_almost:     'Deyarli tayyor',
+  quiz_last_one:   'Oxirgi savol',
 
 
   // ── Loading screen ───────────────────────────────────────────────────────────
@@ -218,7 +224,7 @@ const uz: Record<keyof typeof ru, string> = {
   profile_diet:   'Parhez cheklovlari',
   profile_lang:   'Til',
   profile_notify: 'Bildirishnomalar',
-  profile_share:  'Natijani ulashish',
+  profile_share:  'Ilova haqida aytish',
   profile_clear_history: 'Tarixni tozalash',
   clear_history_confirm_title:    "Butun tarixni tozalashni xohlaysizmi?",
   clear_history_confirm_subtitle: "Bu amalni bekor qilib bo'lmaydi — oldin ko'rgan barcha taomlar ro'yxatdan yo'qoladi.",
@@ -238,22 +244,30 @@ const uz: Record<keyof typeof ru, string> = {
   btn_try_other:       "Qaytadan tanlash",
 
   // ── Yoki / Yoki ──────────────────────────────────────────────────────────────
-  battle_title:        'YOKI / YOKI',
-  battle_subtitle:     "Nima xohlayotganingizni bilmaysizmi?\nIkki taomdan birini tanlang —\nbugungi g'olibni biz topamiz",
-  battle_start:        'Boshlash',
-  battle_hint:         '6 ta tezkor tanlov',
-  battle_question:     'Hozir qaysi birini tanlardingiz?',
+  battle_tutorial_title: 'Ko‘proq nimani xohlasangiz, shuni tanlang',
+  battle_tutorial_sub:   "Sevimlisini qoldiring — unga yangi raqiblar topamiz. Taom umuman xohlanmasa, chapga suring.",
+  battle_tutorial_cta:   'Tushunarli',
+  battle_question:     'Hozir nima xohlaysiz?',
   battle_or:           'yoki',
+  battle_reject:       'bugun emas',
   battle_final:        'Final',
   battle_result_title: 'Bugungi tanlovingiz',
   battle_wins:         "g'alaba,",
+  battle_beat:         'Yutdi:',
+  battle_beat_more:    'va yana',
+  battle_similar:      'Tanlovingizga o‘xshash',
   battle_again:        "Yana o'ynash",
-  battle_home:         'Bosh sahifaga',
+  btn_share_result:    'Ulashish',
+  share_card_caption:  'Bugungi tanlovim',
+  toast_share_saved:   'Rasm saqlandi',
+  toast_share_failed:  "Ulashib bo'lmadi",
   battle_empty_title:  'Hozircha tanlash uchun taom yo‘q',
   battle_empty_sub:    'Profildagi cheklovlar deyarli barcha taomlarni olib tashladi',
 
   // ── Common ───────────────────────────────────────────────────────────────────
   btn_apply:    "Qo'llash",
+  btn_close:    'Yopish',
+  btn_cancel:   'Bekor qilish',
   toast_copied: 'Havola nusxalandi',
   toast_soon:   'Tez orada',
   share_text:   'OMNOM da nima yeyishni topdim!',

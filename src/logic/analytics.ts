@@ -15,6 +15,8 @@ export type EventName =
   | 'test_abandoned'
   | 'random_selected'
   | 'battle_opened'
+  // Каждый выбор в «Или / Или» — живой сигнал о вкусах, а не только итоговый победитель.
+  | 'battle_choice'
   | 'battle_winner';
 
 export type EventFields = {

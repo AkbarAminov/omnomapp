@@ -1,14 +1,16 @@
 'use client';
 
-import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { TabScreen } from '../App';
 import { CuisineOption, cuisineOptions, ModeOption, modeOptions } from './omnomData';
 import type { Dish, MatchedDish, Mode, Question } from '../logic/engine';
 import { HistoryItem, HistoryMode } from '../logic/historyStorage';
-import { canPlay, createBattleSession, registerChoice, winnerRecord } from '../logic/battleEngine';
+import { affinity, canPlay, createBattleSession, registerChoice } from '../logic/battleEngine';
 import type { BattleSession } from '../logic/battleEngine';
-import { loadDiet, saveSettings } from '../logic/settingsStorage';
+import { isBattleOnboardingSeen, loadDiet, markBattleOnboardingSeen, saveSettings } from '../logic/settingsStorage';
 import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
+import { buildShareCard, shareBlob } from '../logic/shareCard';
 import { openExternalLink } from '../lib/openLink';
 import { getTelegramUserInfo } from '../lib/userId';
 import { usePressScale } from '../hooks/usePressScale';
@@ -21,10 +23,11 @@ function NavIcon({ src, active }: { src: string; active: boolean }) {
   return (
     <div
       style={{
-        width: '28px',
-        height: '28px',
+        width: '26px',
+        height: '26px',
         flexShrink: 0,
         backgroundColor: active ? '#ffffff' : 'rgba(61, 26, 0, 0.45)',
+        // Цвет догоняет переезжающий индикатор, а не мигает раньше него.
         WebkitMaskImage: `url(${src})`,
         maskImage: `url(${src})`,
         WebkitMaskRepeat: 'no-repeat',
@@ -33,7 +36,8 @@ function NavIcon({ src, active }: { src: string; active: boolean }) {
         maskSize: 'contain',
         WebkitMaskPosition: 'center',
         maskPosition: 'center',
-        transition: 'background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+        transform: active ? 'scale(1.05)' : 'scale(1)',
+        transition: 'background-color 0.35s cubic-bezier(0.22, 1, 0.36, 1), transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
       }}
     />
   );
@@ -65,11 +69,20 @@ function IconCheckmark() {
   );
 }
 
-function IconTrash({ color = '#6C2912' }: { color?: string }) {
+function IconTrash({ color = '#6C2912', size = 22 }: { color?: string; size?: number }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <path d="M4 7h16M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7M18.5 7l-.8 12.1A2 2 0 0 1 15.7 21H8.3a2 2 0 0 1-2-1.9L5.5 7" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M10 11v6M14 11v6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconShare({ color = '#6C2912' }: { color?: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M12 16V4M12 4L8 8M12 4l4 4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14" stroke={color} strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -111,15 +124,19 @@ function AnimatedPercent({ value }: { value: number }) {
 
 // ─── Shared atoms ─────────────────────────────────────────────────────────────
 
-export function OmNomLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
-  const heights: Record<string, string> = {
-    sm: 'clamp(22px, 6vw, 28px)',
-    md: 'clamp(26px, 7vw, 34px)',
-    lg: 'clamp(40px, 10vw, 52px)',
-  };
+// Один размер на всё приложение: фиксированная ширина и авто-высота, чтобы логотип
+// не прыгал между экранами и не сжимался по вертикали.
+export function OmNomLogo({ stacked = false }: { stacked?: boolean }) {
   return (
     <div className="leading-none select-none">
-      <img src="/assets/logo_horizontal.svg" alt="omnom" style={{ height: heights[size] }} />
+      <img
+        src={stacked ? '/assets/logo_vertical.svg' : '/assets/logo_horizontal.svg'}
+        alt="omnom"
+        style={{
+          width: stacked ? 'clamp(150px, 44vw, 190px)' : 'clamp(128px, 38vw, 156px)',
+          height: 'auto', display: 'block',
+        }}
+      />
     </div>
   );
 }
@@ -148,29 +165,43 @@ export function BottomNav({ active = 'home', onTabChange }: BottomNavProps) {
     { id: 'battle',  src: '/assets/icons/nav-battle.svg',  labelKey: 'nav_battle' },
     { id: 'profile', src: '/assets/icons/nav-profile.svg', labelKey: 'nav_profile' },
   ];
+  const activeIndex = Math.max(0, items.findIndex((i) => i.id === active));
   return (
     <div
       style={{
+        position: 'relative',
         flexShrink: 0,
-        backgroundColor: '#FFF1DC',
+        // Фон прозрачный: панель парит над контентом, а не отрезает полосу экрана.
         paddingTop: '8px',
         paddingLeft: '16px',
         paddingRight: '16px',
         paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))',
-        zIndex: 50,
       }}
     >
       <div
         style={{
+          position: 'relative',
           backgroundColor: '#fff',
           borderRadius: '37px',
           height: '75px',
           display: 'flex',
           alignItems: 'center',
           padding: '4px',
-          boxShadow: '0 4px 24px rgba(149,104,33,0.14)',
+          boxShadow: '0 10px 32px rgba(244,137,36,0.20), 0 4px 12px rgba(244,137,36,0.12), 0 2px 6px rgba(108,41,18,0.08)',
         }}
       >
+        {/* Индикатор один и переезжает между вкладками — переключение читается как
+            движение, а не как перекраска кнопок. */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', top: '4px', bottom: '4px', left: '4px',
+            width: 'calc((100% - 8px) / 4)',
+            transform: `translateX(${activeIndex * 100}%)`,
+            borderRadius: '34px', backgroundColor: '#F48924',
+            transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+        />
         {items.map(({ id, src, labelKey }) => {
           const isActive = id === active;
           return (
@@ -180,20 +211,30 @@ export function BottomNav({ active = 'home', onTabChange }: BottomNavProps) {
               onClick={() => onTabChange?.(id)}
               aria-label={t(labelKey)}
               style={{
+                position: 'relative',
                 flex: 1,
                 height: '67px',
                 borderRadius: '34px',
-                backgroundColor: isActive ? '#F48924' : 'transparent',
+                backgroundColor: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1), transform 0.15s ease',
+                gap: '3px',
               }}
-              {...usePressScale(0.9)}
             >
               <NavIcon src={src} active={isActive} />
+              {/* Иконка «Или / Или» сама по себе ничего не говорит — подписываем все вкладки. */}
+              <span style={{
+                fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '9px', lineHeight: 1,
+                color: isActive ? '#fff' : 'rgba(61, 26, 0, 0.55)',
+                transition: 'color 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
+                maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {t(labelKey)}
+              </span>
             </button>
           );
         })}
@@ -204,18 +245,90 @@ export function BottomNav({ active = 'home', onTabChange }: BottomNavProps) {
 
 // ─── Screen wrapper ───────────────────────────────────────────────────────────
 
-function Screen({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+// fill — экран строго по высоте области: внутренний список скроллится сам, а нижний
+// блок действий остаётся на месте, а не уезжает под плавающую навигацию.
+function Screen({ children, className = '', fill = false }: {
+  children?: React.ReactNode; className?: string; fill?: boolean;
+}) {
   return (
     <div
       className={`flex flex-col w-full ${className}`}
-      style={{ minHeight: '100%', backgroundColor: '#FFF1DC' }}
+      style={{ minHeight: '100%', height: fill ? '100%' : undefined, backgroundColor: '#FFF1DC' }}
     >
       {children}
     </div>
   );
 }
 
-const PAD = '26px';
+const PAD = '20px';          // единое поле экрана для всех вкладок
+// Логотип стоит на всех экранах одинаково: одинаковый отступ сверху и одинаковый воздух под ним.
+const LOGO_TOP = 'clamp(20px, 4dvh, 32px)';
+const LOGO_GAP = 'clamp(12px, 2.5dvh, 20px)';
+// Заголовок экрана — один размер везде: «Что хочется?», «Прошлые поиски», «Профиль»,
+// «Тебе подойдёт», «Подбираем для тебя».
+// Одна логика растворения для всех «парящих» поверхностей: липкие шапки и навигация.
+// Отличается только направление — у шапки фон уходит вниз, у навигации приходит снизу.
+export const SURFACE = '#FFF1DC';
+const FADE_STOPS = (dir: 'to bottom') => `linear-gradient(${dir},`
+  + ` ${SURFACE} 0%, ${SURFACE} 65%,`
+  + ' rgba(255,241,220,0.92) 75%,'
+  + ' rgba(255,241,220,0.65) 85%,'
+  + ' rgba(255,241,220,0.25) 94%,'
+  + ' rgba(255,241,220,0) 100%)';
+const HEADER_FADE = 'clamp(24px, 4dvh, 40px)';
+const HEADER_GRADIENT = FADE_STOPS('to bottom');
+// Высота плавающей навигации: столько места нужно оставить под последним элементом списка.
+export const NAV_SPACE = 'calc(93px + env(safe-area-inset-bottom, 0px))';
+
+// Выбор должен быть виден до того, как экран сменится: короткая оранжевая подсветка
+// поверх самой карточки, без галочек, рамок и свечения.
+const SELECT_HOLD_MS = 150;
+
+function useConfirmTap(onSelect: () => void) {
+  const [selected, setSelected] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const onClick = () => {
+    if (selected) return;
+    setSelected(true);
+    haptic('light');
+    timer.current = setTimeout(onSelect, SELECT_HOLD_MS);
+  };
+  return { selected, onClick };
+}
+
+function SelectedOverlay({ on }: { on: boolean }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 'inherit',
+        background: 'linear-gradient(180deg, rgba(244,137,36,0.55) 0%, rgba(244,137,36,1) 100%)',
+        opacity: on ? 0.4 : 0,
+        transition: 'opacity 110ms ease',
+      }}
+    />
+  );
+}
+
+// Липкая шапка: остаётся сверху, контент уходит под неё и растворяется в фоне.
+function StickyFadeHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      position: 'sticky', top: 0, zIndex: 2,
+      padding: `${LOGO_TOP} ${PAD} ${HEADER_FADE}`,
+      textAlign: 'center',
+      background: HEADER_GRADIENT,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+const SCREEN_TITLE: React.CSSProperties = {
+  fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
+  fontSize: 'clamp(30px, 8.5vw, 42px)', lineHeight: 1.15, letterSpacing: '-0.02em',
+};
 
 // ─── Reusable press button ────────────────────────────────────────────────────
 
@@ -257,7 +370,7 @@ export function AppLoadingScreen() {
   return (
     <Screen>
       <div className="flex flex-col items-center justify-center flex-1" style={{ gap: '20px' }}>
-        <OmNomLogo size="lg" />
+        <OmNomLogo />
         <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', opacity: 0.6, fontSize: '15px' }}>
           {t('app_loading_text')}
         </p>
@@ -301,14 +414,7 @@ export function StartScreen({ onStart, onRandomizer }: { onStart(): void; onRand
         className="flex flex-col items-center justify-center flex-1 text-center"
         style={{ padding: `clamp(32px,8vh,60px) ${PAD} 16px`, gap: 'clamp(20px, 4vh, 32px)' }}
       >
-        <div className="flex flex-col items-center select-none">
-          <img
-            src="/assets/logo_vertical.svg"
-            alt="omnom"
-            style={{ height: 'clamp(90px, 22vw, 130px)' }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        </div>
+        <OmNomLogo stacked />
 
         <div
           style={{
@@ -355,18 +461,18 @@ export function StartScreen({ onStart, onRandomizer }: { onStart(): void; onRand
 export function ModeSelectScreen({ onSelect }: { onSelect(mode: Mode): void }) {
   const { t } = useLang();
   return (
-    <Screen>
-      <div style={{ padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-        <OmNomLogo size="md" />
+    <Screen fill>
+      <div style={{ padding: `${LOGO_TOP} ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: LOGO_GAP }}>
+          <OmNomLogo />
+        </div>
+        <h2 style={SCREEN_TITLE}>{t('mode_title')}</h2>
       </div>
-      <h2 style={{
-        fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', textAlign: 'center',
-        fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em',
-        margin: `clamp(24px, 4.5dvh, 44px) ${PAD} clamp(18px, 3.4dvh, 30px)`,
+      {/* Карточки делят всю оставшуюся высоту: пустого поля под ними не остаётся. */}
+      <div style={{
+        flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+        gap: 'clamp(12px, 2dvh, 18px)', padding: `clamp(16px, 3dvh, 28px) ${PAD} clamp(16px, 3dvh, 28px)`,
       }}>
-        {t('mode_title')}
-      </h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(12px, 3.4vw, 15px)', padding: `0 ${PAD} 16px` }}>
         {modeOptions.map((m) => <ModeCard key={m.id} option={m} onSelect={() => onSelect(m.id)} />)}
       </div>
     </Screen>
@@ -375,39 +481,32 @@ export function ModeSelectScreen({ onSelect }: { onSelect(mode: Mode): void }) {
 
 function ModeCard({ option, onSelect }: { option: ModeOption; onSelect(): void }) {
   const { lang } = useLang();
+  const picked = useConfirmTap(onSelect);
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={picked.onClick}
       style={{
-        display: 'flex', alignItems: 'center', gap: 'clamp(14px, 4.3vw, 19px)',
-        padding: 'clamp(16px, 4.5vw, 22px)', width: '100%', minHeight: 'clamp(104px, 28vw, 124px)',
+        position: 'relative', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px',
+        padding: 'clamp(16px, 4.5vw, 22px)', width: '100%',
+        flex: 1, minHeight: 'clamp(104px, 28vw, 124px)',
         borderRadius: '25px', backgroundColor: '#fff', border: '2px solid transparent',
-        boxShadow: '0 4px 16px rgba(149,104,33,0.09)', cursor: 'pointer', textAlign: 'left',
+        boxShadow: '0 4px 16px rgba(149,104,33,0.09)', cursor: 'pointer', textAlign: 'center',
         transition: 'transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
       }}
       {...usePressScale(0.96)}
     >
-      <div style={{
-        width: 'clamp(64px, 17vw, 76px)', height: 'clamp(64px, 17vw, 76px)', borderRadius: '50%',
-        backgroundColor: '#FFF1DD', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 'clamp(30px, 8vw, 36px)', flexShrink: 0,
-      }}>
-        {option.emoji}
+      <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(20px, 5.6vw, 26px)', lineHeight: 1.2, letterSpacing: '-0.02em' }}>
+        {lang === 'uz' ? option.title_uz : option.title}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(18px, 5vw, 22px)', lineHeight: 1.2, letterSpacing: '-0.02em' }}>
-          {lang === 'uz' ? option.title_uz : option.title}
-        </div>
-        <div style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7, fontSize: 'clamp(12px, 3.3vw, 14px)', lineHeight: 1.35 }}>
-          {lang === 'uz' ? option.description_uz : option.description}
-        </div>
+      <div style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7, fontSize: 'clamp(13px, 3.5vw, 15px)', lineHeight: 1.35 }}>
+        {lang === 'uz' ? option.description_uz : option.description}
       </div>
+      <SelectedOverlay on={picked.selected} />
     </button>
   );
 }
-
-// ─── Screen 2 — Cuisine selection ─────────────────────────────────────────────
 
 export function CuisineSelectionScreen({
   selectedId, onSelect, onRandom,
@@ -415,19 +514,11 @@ export function CuisineSelectionScreen({
   const { t } = useLang();
   return (
     <Screen>
-      <div style={{
-        padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`,
-        display: 'flex', flexDirection: 'column',
-        gap: 'clamp(20px, 3.8dvh, 36px)',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <OmNomLogo size="md" />
-        </div>
-        <ProgressBar progress={0} />
+      <div style={{ padding: `${LOGO_TOP} ${PAD} 0`, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+        <OmNomLogo />
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: `clamp(24px, 4.2dvh, 40px) ${PAD} 0` }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: `${LOGO_GAP} ${PAD} 0` }}>
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(2, 1fr)',
@@ -453,11 +544,13 @@ function CuisineCard({ cuisine, selected, onSelect }: { cuisine: CuisineOption; 
   const { lang } = useLang();
   const title = lang === 'uz' ? cuisine.title_uz : cuisine.title;
   const desc  = lang === 'uz' ? cuisine.description_uz : cuisine.description;
+  const picked = useConfirmTap(onSelect);
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={picked.onClick}
       style={{
+        position: 'relative', overflow: 'hidden',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         paddingTop: 'clamp(26px, 8.2vw, 36px)',
         paddingBottom: 'clamp(14px, 4.1vw, 18px)',
@@ -495,12 +588,13 @@ function CuisineCard({ cuisine, selected, onSelect }: { cuisine: CuisineOption; 
           {title}
         </div>
         <div style={{
-          fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7,
-          fontSize: 'clamp(9px, 2.1vw, 10px)', lineHeight: 1.4,
+          fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.8,
+          fontSize: 'clamp(10px, 2.6vw, 12px)', lineHeight: 1.35,
         }}>
           {desc}
         </div>
       </div>
+      <SelectedOverlay on={picked.selected} />
     </button>
   );
 }
@@ -511,6 +605,7 @@ type SwipeDir = 'left' | 'right' | 'up';
 type SwipeCardHandle = { swipe(dir: SwipeDir): void };
 
 export const CARD_EXIT_MS = 320;
+const CONFIRM_HOLD_MS = 150;      // столько держим подсветку выбранного варианта
 const SWIPE_DISTANCE = 80;
 const FLICK_VELOCITY = 0.5; // px per ms
 const EXIT_EASE = 'cubic-bezier(0.4, 0, 1, 1)';
@@ -520,20 +615,31 @@ type SwipeCardProps = {
   children: React.ReactNode;
   onSwipe(dir: SwipeDir): void;
   onExitStart?(): void;
+  // Направление текущего перетаскивания — чтобы за карточкой показывать тот вопрос,
+  // который действительно будет следующим при таком ответе.
+  onDirection?(dir: SwipeDir | null): void;
   style?: React.CSSProperties;
 };
 
 // Pose updates go straight to the DOM (transform/opacity only) so dragging never re-renders React.
-const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwipe, onExitStart, style }, ref) => {
+const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwipe, onExitStart, onDirection, style }, ref) => {
   const { t } = useLang();
   const cardRef = useRef<HTMLDivElement>(null);
   const tintRef = useRef<HTMLDivElement>(null);
   const yesRef = useRef<HTMLDivElement>(null);
   const noRef = useRef<HTMLDivElement>(null);
   const exiting = useRef(false);
+  const confirming = useRef(false);
   const drag = useRef<{ x: number; y: number; lastX: number; lastY: number; lastT: number; vx: number; vy: number } | null>(null);
   const raf = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDir = useRef<SwipeDir | null>(null);
+
+  const reportDir = useCallback((dir: SwipeDir | null) => {
+    if (lastDir.current === dir) return;
+    lastDir.current = dir;
+    onDirection?.(dir);
+  }, [onDirection]);
 
   const pose = useCallback((dx: number, dy: number, transition: string | null, fade = 1) => {
     const el = cardRef.current;
@@ -543,9 +649,14 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwi
     el.style.transform = `translate3d(${dx}px, ${dy}px, 0) rotate(${rotate}deg)`;
     el.style.opacity = String(fade);
     const strength = Math.min(Math.abs(dx) / 110, 1);
+    // Во время подтверждения выбора заливка оранжевая — её не перебивает цвет направления.
+    if (confirming.current) return;
     for (const node of [tintRef.current, yesRef.current, noRef.current]) if (node) node.style.transition = transition ? `opacity ${transition}` : 'none';
     if (tintRef.current) {
-      tintRef.current.style.backgroundColor = dx >= 0 ? 'rgb(34,197,94)' : 'rgb(239,68,68)';
+      // Градиент со стороны свайпа: видно не только «куда», но и «насколько».
+      tintRef.current.style.background = dx >= 0
+        ? 'linear-gradient(to left, rgba(34,197,94,1) 0%, rgba(34,197,94,0.35) 60%, rgba(34,197,94,0) 100%)'
+        : 'linear-gradient(to right, rgba(239,68,68,1) 0%, rgba(239,68,68,0.35) 60%, rgba(239,68,68,0) 100%)';
       tintRef.current.style.opacity = String(strength * 0.4);
     }
     if (yesRef.current) yesRef.current.style.opacity = String(dx > 0 ? strength : 0);
@@ -565,14 +676,28 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwi
     timer.current = setTimeout(() => onSwipe(dir), CARD_EXIT_MS);
   }, [onExitStart, onSwipe, pose]);
 
-  useImperativeHandle(ref, () => ({ swipe: commit }), [commit]);
+  // Нажатие по кнопке ответа: сначала видно, что именно выбрано, и только потом карточка уходит.
+  const confirmThenCommit = useCallback((dir: SwipeDir) => {
+    if (exiting.current || confirming.current) return;
+    confirming.current = true;
+    haptic('light');
+    const tint = tintRef.current;
+    if (tint) {
+      tint.style.transition = 'opacity 110ms ease';
+      tint.style.background = 'linear-gradient(180deg, rgba(244,137,36,0.55) 0%, rgba(244,137,36,1) 100%)';
+      tint.style.opacity = '0.4';
+    }
+    timer.current = setTimeout(() => commit(dir), CONFIRM_HOLD_MS);
+  }, [commit]);
+
+  useImperativeHandle(ref, () => ({ swipe: confirmThenCommit }), [confirmThenCommit]);
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
     cancelAnimationFrame(raf.current);
   }, []);
 
-  const springBack = () => pose(0, 0, `0.45s ${RETURN_EASE}`);
+  const springBack = () => { reportDir(null); pose(0, 0, `0.45s ${RETURN_EASE}`); };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (exiting.current) return;
@@ -592,6 +717,8 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwi
     d.lastX = e.clientX; d.lastY = e.clientY; d.lastT = now;
     const dx = e.clientX - d.x;
     const dy = e.clientY - d.y;
+    const horizontal = Math.abs(dx) >= Math.abs(dy);
+    reportDir(Math.max(Math.abs(dx), Math.abs(dy)) < 12 ? null : horizontal ? (dx > 0 ? 'right' : 'left') : (dy < 0 ? 'up' : null));
     cancelAnimationFrame(raf.current);
     raf.current = requestAnimationFrame(() => pose(dx, dy * 0.5, null));
   };
@@ -700,18 +827,22 @@ const CARD_BOX: React.CSSProperties = {
 const BACK_REST = 'translate3d(0, 14px, 0) scale(0.94)';
 
 export const QuestionCardScreen = memo(function QuestionCardScreen({
-  question, isLast, progress, questionNumber, remaining, onAnswer,
+  question, isLast, nearEnd = false, nextByAnswer, onAnswer,
 }: {
   question: Question;
   isLast: boolean;
-  progress: number;
-  questionNumber: number;
-  remaining: number;
+  // Число вопросов заранее неизвестно, поэтому подсказываем только близость финала.
+  nearEnd?: boolean;
+  // Что окажется за карточкой: заранее просчитанные следующие вопросы по каждому ответу.
+  nextByAnswer?: Partial<Record<'yes' | 'no' | 'any', Question | null>>;
   onAnswer(value: 'yes' | 'no' | 'any'): void;
 }) {
   const { t } = useLang();
   const swipeRef = useRef<SwipeCardHandle>(null);
   const backRef = useRef<HTMLDivElement>(null);
+  const [dir, setDir] = useState<SwipeDir | null>(null);
+  const behind = (dir === 'right' ? nextByAnswer?.yes : dir === 'left' ? nextByAnswer?.no : nextByAnswer?.any)
+    ?? nextByAnswer?.any ?? null;
 
   // The blank back card sits behind; when the front card leaves it moves forward, and the next
   // question mounts exactly in its place, so nothing jumps.
@@ -720,6 +851,7 @@ export const QuestionCardScreen = memo(function QuestionCardScreen({
     if (!el) return;
     el.style.transition = 'none';
     el.style.transform = BACK_REST;
+    setDir(null);
   }, [question.id]);
 
   const handleExitStart = useCallback(() => {
@@ -733,22 +865,19 @@ export const QuestionCardScreen = memo(function QuestionCardScreen({
     onAnswer(dir === 'right' ? 'yes' : dir === 'left' ? 'no' : 'any');
   }, [onAnswer]);
 
-  const label: React.CSSProperties = { fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', fontSize: 'clamp(12px, 3.3vw, 14px)' };
-
   return (
     <Screen>
-      <div style={{ padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`, display: 'flex', flexDirection: 'column', gap: 'clamp(16px, 3.5dvh, 32px)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <OmNomLogo size="md" />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={label}>{t('quiz_question_n').replace('{n}', String(questionNumber))}</span>
-            <span style={{ ...label, opacity: 0.6 }}>
-              {isLast ? t('quiz_last') : t('quiz_remaining').replace('{k}', String(Math.max(1, remaining - 1)))}
-            </span>
-          </div>
-          <ProgressBar progress={progress} />
+      {/* Счётчика шагов здесь нет: движок сам решает, сколько вопросов задать, и фиксированное
+          «2 / 6» обещало бы человеку то, чего система не знает. */}
+      <div style={{ padding: `${LOGO_TOP} ${PAD} 0`, display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+        <OmNomLogo />
+        <div style={{
+          height: '16px', marginTop: '6px',
+          fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 'clamp(11px, 3vw, 13px)',
+          color: '#F48924', letterSpacing: '0.02em',
+          opacity: isLast || nearEnd ? 1 : 0, transition: 'opacity 260ms ease',
+        }}>
+          {isLast ? t('quiz_last_one') : t('quiz_almost')}
         </div>
       </div>
 
@@ -756,9 +885,9 @@ export const QuestionCardScreen = memo(function QuestionCardScreen({
         position: 'relative',
         width: `calc(100% - ${parseInt(PAD) * 2}px)`,
         alignSelf: 'center',
-        height: 'clamp(360px, 57dvh, 554px)',
-        marginTop: 'clamp(20px, 4.9dvh, 47px)',
-        flexShrink: 0,
+        flex: 1, minHeight: 'clamp(340px, 52dvh, 620px)',
+        marginTop: 'clamp(8px, 1.6dvh, 16px)',
+        marginBottom: 'clamp(8px, 1.6dvh, 16px)',
       }}>
         {isLast ? (
           <div style={{ ...CARD_BOX, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}>
@@ -767,17 +896,21 @@ export const QuestionCardScreen = memo(function QuestionCardScreen({
             </span>
           </div>
         ) : (
-          <div ref={backRef} style={{ ...CARD_BOX, transform: BACK_REST, willChange: 'transform', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }} />
+          // За текущей карточкой лежит настоящий следующий вопрос — видно, что тест продолжается.
+          <div ref={backRef} style={{ ...CARD_BOX, transform: BACK_REST, willChange: 'transform', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
+            {behind && <QuestionCardBody question={behind} />}
+          </div>
         )}
 
         <SwipeCard
           key={question.id}
           ref={swipeRef}
           onExitStart={isLast ? undefined : handleExitStart}
+          onDirection={setDir}
           onSwipe={handleSwipe}
           style={{ ...CARD_BOX, boxShadow: '0 4px 31px rgba(0,0,0,0.1)' }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, animation: 'cardContentIn 0.22s ease-out both' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <QuestionCardBody question={question} />
           </div>
         </SwipeCard>
@@ -787,7 +920,7 @@ export const QuestionCardScreen = memo(function QuestionCardScreen({
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         gap: 'clamp(18px, 6.1vw, 27px)',
         flexShrink: 0,
-        padding: `clamp(14px, 4dvh, 44px) ${PAD} clamp(20px, 3.5dvh, 36px)`,
+        padding: `clamp(10px, 2dvh, 20px) ${PAD} clamp(24px, 4.2dvh, 44px)`,
       }}>
         <ActionCircle
           size="large"
@@ -852,10 +985,40 @@ function ActionCircle({ icon, label, bg, onClick, size, shadow }: {
 // ─── Dish image with emoji placeholder ───────────────────────────────────────
 // Fills its (position: relative) parent, so the layout is identical with or without a photo.
 
+// Уже загруженные адреса: в «Или / Или» следующая пара подгружается заранее, и тогда
+// карточка не должна ещё раз проявляться из эмодзи-заглушки.
+const loadedImages = new Set<string>();
+const loadingImages = new Map<string, Promise<void>>();
+
+export function preloadImage(src: string | null | undefined): Promise<void> {
+  if (!src || loadedImages.has(src)) return Promise.resolve();
+  let pending = loadingImages.get(src);
+  if (!pending) {
+    pending = new Promise<void>((resolve) => {
+      const img = new Image();
+      img.onload = () => { loadedImages.add(src); loadingImages.delete(src); resolve(); };
+      // Недоступную фотографию ждать нечего: карточка покажет эмодзи-заглушку.
+      img.onerror = () => { loadingImages.delete(src); resolve(); };
+      img.src = src;
+    });
+    loadingImages.set(src, pending);
+  }
+  return pending;
+}
+
+// Ждём картинки, но не дольше предела: порванная сеть не должна останавливать игру.
+function imagesReady(srcs: Array<string | null | undefined>, capMs: number): Promise<void> {
+  const all = Promise.all(srcs.map(preloadImage)).then(() => {});
+  return Promise.race([all, new Promise<void>((resolve) => setTimeout(resolve, capMs))]);
+}
+
 function DishImage({ image, emoji, alt, emojiSize }: { image: string; emoji: string; alt: string; emojiSize: string }) {
-  const [failed, setFailed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const showImg = !!image && !failed;
+  // Адрес, а не флаг: один и тот же <img> в карточке «Или / Или» переиспользуется под
+  // разные блюда, и флаг «загружено» показал бы новое фото раньше времени.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const showImg = !!image && failedSrc !== image;
+  const loaded = !!image && (loadedSrc === image || loadedImages.has(image));
   return (
     <div style={{
       position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -866,13 +1029,16 @@ function DishImage({ image, emoji, alt, emojiSize }: { image: string; emoji: str
       )}
       {showImg && (
         <img
+          // Новый адрес — новый элемент: иначе на время загрузки карточка показывала бы
+          // отрисованное фото предыдущего блюда.
+          key={image}
           src={image}
           alt={alt}
           loading="lazy"
           decoding="async"
           draggable={false}
-          onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
+          onLoad={() => { loadedImages.add(image); setLoadedSrc(image); }}
+          onError={() => setFailedSrc(image)}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block',
             opacity: loaded ? 1 : 0, transition: 'opacity 0.25s ease',
@@ -890,37 +1056,25 @@ export function LoadingScreen({ progress }: { progress: number }) {
   const pct = Math.min(Math.max(Math.round(progress), 0), 100);
   return (
     <Screen>
-      <div style={{
-        padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`,
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: 'clamp(16px, 3dvh, 28px)',
-        flexShrink: 0,
-      }}>
-        <OmNomLogo size="lg" />
-        <h2 style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
-          fontSize: 'clamp(32px, 9vw, 44px)', textAlign: 'center', lineHeight: 1.15,
-          letterSpacing: '-0.03em', whiteSpace: 'pre-line',
-        }}>
-          {t('loading_title')}
-        </h2>
+      <div style={{ padding: `${LOGO_TOP} ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: LOGO_GAP }}>
+          <OmNomLogo />
+        </div>
+        <h2 style={{ ...SCREEN_TITLE, whiteSpace: 'pre-line' }}>{t('loading_title')}</h2>
       </div>
 
       <div style={{
         flex: 1, minHeight: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: `clamp(4px, 1dvh, 12px) 0`,
         overflow: 'hidden',
-        padding: `clamp(8px, 1.5dvh, 16px) 0`,
       }}>
         <img
           src="/assets/char-loading.png"
           alt=""
-          style={{
-            height: 'clamp(240px, 44dvh, 400px)',
-            width: 'auto',
-            maxWidth: '90%',
-            objectFit: 'contain',
-          }}
+          // Персонаж — главный элемент состояния: берёт всю доступную ширину и высоту,
+          // пропорции не трогаем.
+          style={{ width: '100%', height: '100%', maxWidth: '520px', objectFit: 'contain' }}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none';
             const span = document.createElement('span');
@@ -930,7 +1084,7 @@ export function LoadingScreen({ progress }: { progress: number }) {
         />
       </div>
 
-      <div style={{ padding: `0 ${PAD}`, marginBottom: 'clamp(20px, 3.5dvh, 32px)', flexShrink: 0 }}>
+      <div style={{ padding: `0 ${PAD}`, marginBottom: 'clamp(16px, 2.6dvh, 26px)', flexShrink: 0 }}>
         <div style={{
           position: 'relative', borderRadius: '999px', overflow: 'hidden',
           height: 'clamp(54px, 12vw, 66px)', backgroundColor: '#E5CDA5',
@@ -954,20 +1108,66 @@ export function LoadingScreen({ progress }: { progress: number }) {
   );
 }
 
+// ─── Названия блюд: чем длиннее, тем мельче кегль ────────────────────────────
+// Одна строка — идеал, две — допустимо; дальше название начинает съедать фотографию.
+
+function titleScale(name: string): number {
+  const len = name.trim().length;
+  if (len <= 14) return 1;
+  if (len <= 20) return 0.88;
+  if (len <= 28) return 0.78;
+  return 0.7;
+}
+
+function dishTitleSize(name: string, min: number, vw: number, max: number): string {
+  const k = titleScale(name);
+  return `clamp(${(min * k).toFixed(1)}px, ${(vw * k).toFixed(2)}vw, ${(max * k).toFixed(1)}px)`;
+}
+
 // ─── Screen 9 — Single result ─────────────────────────────────────────────────
 
+// Один экран результата на все источники: после теста, рандомайзера и «Или / Или».
+// Отличается только блок действий — композиция, карточка и типографика общие.
 export function SingleResultScreen({
-  dish, exact = true, onRetry, onAllResults, onGoHome, variant = 'quiz',
+  dish, exact = true, onRetry, onAllResults, onGoHome, variant = 'quiz', beat = [], similar = [],
 }: {
-  dish: MatchedDish; exact?: boolean; onRetry(): void; onAllResults?(): void; onGoHome(): void;
-  variant?: 'quiz' | 'randomizer';
+  dish: MatchedDish; exact?: boolean; onRetry?(): void; onAllResults?(): void; onGoHome(): void;
+  variant?: 'quiz' | 'randomizer' | 'battle';
+  // Кого победитель обошёл по дороге и что ещё похоже на выбранное за игру.
+  beat?: readonly string[];
+  similar?: readonly MatchedDish[];
 }) {
   const { t, lang } = useLang();
   const dishName = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
   const dishDesc = lang === 'uz' ? (dish.description_uz || dish.description) : dish.description;
+  const [toast, setToast] = useState<string | null>(null);
+  const [card, setCard] = useState<Blob | null>(null);
+  const [sheet, setSheet] = useState<number | null>(null);
+  const caption = t('share_card_caption');
+
+  // Картинка для шеринга рисуется, пока человек смотрит результат: по нажатию её
+  // нужно только отдать — иначе платформа сочтёт вызов без жеста.
+  useEffect(() => {
+    if (variant !== 'battle') return;
+    let alive = true;
+    buildShareCard(dish, dishName, caption).then((blob) => { if (alive) setCard(blob); });
+    return () => { alive = false; };
+  }, [variant, dish, dishName, caption]);
+
+  const share = () => {
+    haptic('light');
+    void shareBlob(card, caption).then((outcome) => {
+      if (outcome === 'shared') return;
+      setToast(t(outcome === 'downloaded' ? 'toast_share_saved' : 'toast_share_failed'));
+      setTimeout(() => setToast(null), 2200);
+    });
+  };
+
   return (
-    <Screen>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: `clamp(28px, 4.3dvh, 41px) ${PAD} 0`, flexShrink: 0 }}>
+    // После «Или / Или» на экране больше содержимого (кого обошёл, похожие блюда),
+    // поэтому он прокручивается; у теста композиция помещается целиком.
+    <Screen className={variant === 'battle' ? 'battle-winner-in' : ''} fill={variant !== 'battle'}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: `${LOGO_TOP} ${PAD} 0`, flexShrink: 0 }}>
         <button
           type="button"
           onClick={onGoHome}
@@ -975,26 +1175,36 @@ export function SingleResultScreen({
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)' }}
           {...usePressScale(0.94)}
         >
-          <OmNomLogo size="sm" />
+          <OmNomLogo />
         </button>
       </div>
 
+      {/* У теста карточка занимает свободную высоту: на низком экране ужимается
+          фотография, а кнопки остаются над навигацией. */}
       <div style={{
-        margin: `clamp(12px, 5.9dvh, 56px) ${PAD} 0`,
+        ...(variant === 'battle' ? { flexShrink: 0 } : { flex: 1, minHeight: 0 }),
+        margin: `clamp(16px, 3dvh, 32px) ${PAD} 0`,
         borderRadius: '40px',
         backgroundColor: '#fff',
         overflow: 'hidden',
-        flexShrink: 0,
+        display: 'flex', flexDirection: 'column',
         boxShadow: '0 14px 8px rgba(0,0,0,0.07)',
       }}>
-        <div style={{ position: 'relative', width: '100%', aspectRatio: '1', backgroundColor: '#FFF1DD', overflow: 'hidden', borderRadius: '40px 40px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{
+          position: 'relative', width: '100%',
+          ...(variant === 'battle'
+            ? { aspectRatio: '1', flexShrink: 0 }
+            : { flex: 1, minHeight: 'clamp(150px, 24dvh, 340px)' }),
+          backgroundColor: '#FFF1DD', overflow: 'hidden', borderRadius: '40px 40px 0 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
           <DishImage key={dish.id} image={dish.image} emoji={dish.emoji} alt={dishName} emojiSize="clamp(96px, 28vw, 150px)" />
         </div>
 
-        <div style={{ padding: 'clamp(16px, 2.4dvh, 23px) clamp(16px, 4vw, 22px) clamp(18px, 2.7dvh, 26px)', textAlign: 'center' }}>
+        <div style={{ padding: 'clamp(14px, 2.2dvh, 22px) clamp(16px, 4vw, 22px) clamp(16px, 2.4dvh, 24px)', textAlign: 'center', flexShrink: 0 }}>
           <h1 style={{
             fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
-            fontSize: 'clamp(22px, 8.8vw, 39px)', lineHeight: '1.175',
+            fontSize: dishTitleSize(dishName, 22, 8.8, 39), lineHeight: '1.175',
             letterSpacing: '-0.02em',
           }}>
             {dishName}
@@ -1014,31 +1224,125 @@ export function SingleResultScreen({
               </span>
             </div>
           )}
+          {/* У победителя «Или / Или» нет процента совпадения — он выбран руками.
+              Счёт «6 из 6» ничего не объяснял, поэтому называем проигравших. */}
+          {variant === 'battle' && beat.length > 0 && (
+            <div style={{
+              fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#F48924',
+              fontSize: 'clamp(12px, 3.2vw, 15px)', marginTop: 'clamp(6px, 1dvh, 10px)',
+              lineHeight: 1.35,
+            }}>
+              {t('battle_beat')} {beat.slice(0, 3).join(', ')}
+              {beat.length > 3 ? ` ${t('battle_beat_more')} ${beat.length - 3}` : ''}
+            </div>
+          )}
           <p style={{
-            fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7,
-            fontSize: 'clamp(13px, 3.5vw, 16px)', marginTop: 'clamp(8px, 1.5dvh, 14px)',
+            fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.8,
+            fontSize: 'clamp(14px, 3.7vw, 16px)', marginTop: 'clamp(8px, 1.5dvh, 14px)',
             lineHeight: '21px',
+            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>
             {dishDesc}
           </p>
         </div>
       </div>
 
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: 'clamp(18px, 6.1vw, 27px)',
-        marginTop: 'clamp(14px, 2.8dvh, 26px)',
-        flexShrink: 0, padding: `0 ${PAD}`,
-        paddingBottom: 'clamp(8px, 1.5dvh, 14px)',
-      }}>
-        {variant === 'randomizer' && (
-          <ActionCircle size="large" icon={<IconArrowLeft />} label={t('btn_back')} onClick={onGoHome} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
-        )}
-        <ActionCircle size="large" icon={<img src="/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_retry')} onClick={onRetry} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
-        {variant === 'quiz' && onAllResults && (
-          <ActionCircle size="large" icon={<img src="/assets/icons/reply-variants.svg" alt="" style={{ width: '48%', height: '48%', pointerEvents: 'none' }} />} label={t('btn_all_results')} onClick={onAllResults} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
-        )}
-      </div>
+      {/* Шесть выборов — это сигнал о вкусах, и его жалко выбрасывать: показываем,
+          что ещё похоже на то, что человек выбирал весь раунд. */}
+      {variant === 'battle' && similar.length > 0 && (
+        <div style={{ flexShrink: 0, padding: `clamp(12px, 2dvh, 20px) ${PAD} 0` }}>
+          <div style={{
+            fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#6C2912', opacity: 0.6,
+            fontSize: 'clamp(11px, 3vw, 13px)', textTransform: 'uppercase', letterSpacing: '0.06em',
+            marginBottom: '10px', textAlign: 'center',
+          }}>
+            {t('battle_similar')}
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {similar.slice(0, 3).map((d, i) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setSheet(i)}
+                aria-label={lang === 'uz' ? (d.name_uz || d.name) : d.name}
+                style={{
+                  flex: 1, minWidth: 0, padding: 0, border: 'none', cursor: 'pointer',
+                  borderRadius: '20px', overflow: 'hidden', backgroundColor: '#fff',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+                  transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+                }}
+                {...usePressScale(0.96)}
+              >
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '1', overflow: 'hidden' }}>
+                  <DishImage image={d.image} emoji={d.emoji} alt={d.name} emojiSize="clamp(28px, 8vw, 36px)" />
+                </div>
+                <div style={{
+                  fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912',
+                  fontSize: 'clamp(10px, 2.7vw, 12px)', lineHeight: 1.2, padding: '8px 6px 10px',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {lang === 'uz' ? (d.name_uz || d.name) : d.name}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {variant === 'battle' ? (
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: '10px',
+          padding: `clamp(16px, 2.6dvh, 28px) ${PAD} clamp(10px, 1.8dvh, 18px)`,
+          flexShrink: 0,
+        }}>
+          <PressButton onClick={share} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+              <IconShare color="#fff" />
+              {t('btn_share_result')}
+            </span>
+          </PressButton>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              style={{
+                width: '100%', height: '52px', borderRadius: '100px', background: '#fff',
+                border: 'none', cursor: 'pointer',
+                fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#6C2912',
+                fontSize: 'clamp(14px, 3.7vw, 16px)',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+                transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+              {...usePressScale(0.97)}
+            >
+              {t('battle_again')}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: 'clamp(18px, 6.1vw, 27px)',
+          marginTop: 'clamp(12px, 2.2dvh, 22px)',
+          flexShrink: 0, padding: `0 ${PAD}`,
+          paddingBottom: 'clamp(8px, 1.5dvh, 14px)',
+        }}>
+          {variant === 'randomizer' && (
+            <ActionCircle size="large" icon={<IconArrowLeft />} label={t('btn_back')} onClick={onGoHome} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+          )}
+          {onRetry && (
+            <ActionCircle size="large" icon={<img src="/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_retry')} onClick={onRetry} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+          )}
+          {variant === 'quiz' && onAllResults && (
+            <ActionCircle size="large" icon={<img src="/assets/icons/reply-variants.svg" alt="" style={{ width: '48%', height: '48%', pointerEvents: 'none' }} />} label={t('btn_all_results')} onClick={onAllResults} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+          )}
+        </div>
+      )}
+
+      {sheet !== null && similar.length > 0 && (
+        <DishSheet dishes={[...similar]} index={sheet} onIndex={setSheet} onClose={() => setSheet(null)} />
+      )}
+      {toast && <Toast message={toast} />}
     </Screen>
   );
 }
@@ -1051,7 +1355,7 @@ export function NoResultsScreen({ onRetry, onGoHome }: { onRetry(): void; onGoHo
     <Screen>
       <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'clamp(12px, 2.5dvh, 20px)' }}>
-          <OmNomLogo size="md" />
+          <OmNomLogo />
         </div>
       </div>
 
@@ -1113,345 +1417,674 @@ export function ResultsListScreen({
     onTabChange?.(id);
   };
   const activeResults = tab === 'cuisine' || !allCuisineResults ? sameCuisineResults : allCuisineResults;
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   return (
-    <Screen>
-      <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'clamp(12px, 2.5dvh, 20px)' }}>
+    <Screen fill>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <StickyFadeHeader>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: LOGO_GAP }}>
+            <button
+              type="button"
+              onClick={onGoHome}
+              aria-label={t('nav_home')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)' }}
+              {...usePressScale(0.94)}
+            >
+              <OmNomLogo />
+            </button>
+          </div>
+          <h2 style={SCREEN_TITLE}>
+            {t('results_title')}
+          </h2>
+          <p style={{ color: '#6C2912', opacity: 0.8, fontFamily: 'Inter, sans-serif', fontSize: 'clamp(13px, 3.4vw, 15px)', marginTop: '4px' }}>
+            {t('results_subtitle')}
+          </p>
+
+          {allCuisineResults && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'clamp(14px, 2.8dvh, 20px)' }}>
+              <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '999px', padding: '4px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>
+                {(['cuisine', 'all'] as const).map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => selectTab(id)}
+                    style={{
+                      padding: '9px 18px', borderRadius: '999px', border: 'none', cursor: 'pointer',
+                      fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 'clamp(12px, 3.2vw, 14px)',
+                      backgroundColor: tab === id ? '#F48924' : 'transparent',
+                      color: tab === id ? '#fff' : '#6C2912',
+                      transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s',
+                    }}
+                    {...usePressScale(0.95)}
+                  >
+                    {t(id === 'cuisine' ? 'tab_this_cuisine' : 'tab_all_cuisines')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </StickyFadeHeader>
+
+        <div style={{ padding: `0 ${PAD}`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {activeResults.map((dish, i) => (
+            <ResultCard key={dish.id} dish={dish} highlighted={i === 0} onOpen={() => setOpenIndex(i)} />
+          ))}
+        </div>
+
+        {/* Кнопки идут после списка, а не приклеены к низу экрана. */}
+        {/* История есть в навигации, поэтому главное действие здесь — пройти заново. */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: '10px',
+          padding: `clamp(16px, 2.6dvh, 24px) ${PAD} 0`,
+          paddingBottom: `calc(${NAV_SPACE} + clamp(8px, 1.6dvh, 16px))`,
+        }}>
+          <PressButton onClick={onRetry} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
+            {t('btn_retry')}
+          </PressButton>
           <button
             type="button"
-            onClick={onGoHome}
-            aria-label={t('nav_home')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)' }}
-            {...usePressScale(0.94)}
+            onClick={onOpenHistory}
+            style={{
+              width: '100%', height: '52px', borderRadius: '100px', background: '#fff',
+              border: 'none', cursor: 'pointer',
+              fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#6C2912',
+              fontSize: 'clamp(14px, 3.7vw, 16px)',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+              transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+            {...usePressScale(0.97)}
           >
-            <OmNomLogo size="md" />
+            {t('btn_view_history')}
           </button>
         </div>
-        <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em' }}>
-          {t('results_title')}
-        </h2>
-        <p style={{ color: '#6C2912', opacity: 0.7, fontFamily: 'Inter, sans-serif', fontSize: 'clamp(12px, 3vw, 14px)', marginTop: '4px' }}>
-          {t('results_subtitle')}
-        </p>
-
-        {allCuisineResults && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'clamp(14px, 2.8dvh, 20px)' }}>
-            <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '999px', padding: '4px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>
-              {(['cuisine', 'all'] as const).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => selectTab(id)}
-                  style={{
-                    padding: '9px 18px', borderRadius: '999px', border: 'none', cursor: 'pointer',
-                    fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 'clamp(12px, 3.2vw, 14px)',
-                    backgroundColor: tab === id ? '#F48924' : 'transparent',
-                    color: tab === id ? '#fff' : '#6C2912',
-                    transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s',
-                  }}
-                  {...usePressScale(0.95)}
-                >
-                  {t(id === 'cuisine' ? 'tab_this_cuisine' : 'tab_all_cuisines')}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: `12px ${PAD}`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {activeResults.map((dish, i) => <ResultCard key={dish.id} dish={dish} highlighted={i === 0} />)}
-      </div>
+      {openIndex !== null && (
+        <DishSheet
+          dishes={activeResults}
+          index={openIndex}
+          onIndex={setOpenIndex}
+          onClose={() => setOpenIndex(null)}
+        />
+      )}
 
-      <div style={{ display: 'flex', gap: '10px', padding: `8px ${PAD} 10px`, flexShrink: 0 }}>
-        <button
-          type="button"
-          onClick={onRetry}
-          style={{
-            flexShrink: 0, borderRadius: '50%',
-            width: 'clamp(52px, 13vw, 62px)', height: 'clamp(52px, 13vw, 62px)',
-            backgroundColor: '#FFFBF4', border: 'none',
-            boxShadow: '0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
-          }}
-          {...usePressScale(0.9)}
-        >
-          <img src="/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%' }} />
-        </button>
-        <PressButton onClick={onOpenHistory} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
-          {t('btn_view_history')}
-        </PressButton>
-      </div>
     </Screen>
   );
 }
 
-function ResultCard({ dish, highlighted }: { dish: MatchedDish; highlighted?: boolean }) {
+function ResultCard({ dish, highlighted, onOpen }: {
+  dish: MatchedDish; highlighted?: boolean; onOpen(): void;
+}) {
   const { lang, t } = useLang();
   const name = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
-  const desc = lang === 'uz' ? (dish.description_uz || dish.description) : dish.description;
   const thumbSize = 'clamp(86px, 20vw, 99px)';
   return (
-    <div style={{
-      display: 'flex', gap: 'clamp(10px,2.5vw,14px)', borderRadius: '33px',
-      backgroundColor: highlighted ? '#FFF0E1' : '#fff',
-      border: highlighted ? '2.5px solid #F48924' : '2.5px solid transparent',
-      alignItems: 'center', padding: 'clamp(12px,3vw,16px)',
-      boxShadow: highlighted ? '0 12px 16px rgba(244,137,36,0.15)' : '0 4px 16px rgba(0,0,0,0.05)',
-    }}>
-      <div style={{
-        position: 'relative', flexShrink: 0, borderRadius: '16.5px', width: thumbSize, height: thumbSize, overflow: 'hidden',
-      }}>
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={name}
+      style={{
+        display: 'flex', gap: '14px', borderRadius: '33px', width: '100%', textAlign: 'left',
+        backgroundColor: highlighted ? '#FFF0E1' : '#fff',
+        border: highlighted ? '2.5px solid #F48924' : '2.5px solid transparent',
+        alignItems: 'center', padding: '16px', cursor: 'pointer',
+        boxShadow: highlighted ? '0 12px 16px rgba(244,137,36,0.15)' : '0 4px 16px rgba(0,0,0,0.05)',
+        transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+      }}
+      {...usePressScale(0.975)}
+    >
+      <div style={{ position: 'relative', flexShrink: 0, borderRadius: '20px', width: thumbSize, height: thumbSize, overflow: 'hidden' }}>
         <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(40px, 10vw, 52px)" />
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(14px, 3.5vw, 18px)', lineHeight: 1.2, letterSpacing: '-0.01em' }}>
+      {/* Описание переехало в развёрнутый просмотр: в маленькой карточке оно было нечитаемым. */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
+          fontSize: dishTitleSize(name, 16, 4.2, 20), lineHeight: 1.2, letterSpacing: '-0.01em',
+        }}>
           {name}
         </div>
-        <div style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.65, fontSize: 'clamp(10px, 2.4vw, 12px)', marginTop: '3px', lineHeight: 1.3 }}>
-          {desc}
-        </div>
-        {dish.matchPercent != null && <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginTop: '6px' }}>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#F48924', fontSize: 'clamp(10px, 2.3vw, 12px)' }}>{t('results_match_label')}</span>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#F48924', fontSize: 'clamp(22px, 5.5vw, 28px)', letterSpacing: '-0.01em' }}><AnimatedPercent value={dish.matchPercent} /></span>
-        </div>}
+        {dish.matchPercent != null && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#F48924', fontSize: 'clamp(11px, 2.8vw, 13px)' }}>{t('results_match_label')}</span>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#F48924', fontSize: 'clamp(22px, 5.5vw, 28px)', letterSpacing: '-0.01em' }}><AnimatedPercent value={dish.matchPercent} /></span>
+          </div>
+        )}
       </div>
-    </div>
+      <IconChevronRight />
+    </button>
+  );
+}
+
+// ─── Развёрнутый просмотр блюда ──────────────────────────────────────────────
+// Пять вариантов можно пролистать, не закрывая просмотр: закрыть → открыть другую карточку —
+// это не просмотр меню, а хождение по экранам.
+
+function DishSheet({ dishes, index, onIndex, onClose }: {
+  dishes: MatchedDish[]; index: number; onIndex(i: number): void; onClose(): void;
+}) {
+  const { lang, t } = useLang();
+  const [toast, setToast] = useState<string | null>(null);
+  const [drag, setDrag] = useState(0);
+  const startX = useRef<number | null>(null);
+  const width = useRef(1);
+
+  const go = (i: number) => onIndex(Math.max(0, Math.min(dishes.length - 1, i)));
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    startX.current = e.clientX;
+    width.current = (e.currentTarget as HTMLElement).clientWidth || 1;
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (startX.current === null) return;
+    setDrag(e.clientX - startX.current);
+  };
+  const onPointerUp = () => {
+    if (startX.current === null) return;
+    const moved = drag;
+    startX.current = null;
+    setDrag(0);
+    if (Math.abs(moved) > width.current * 0.18) go(index + (moved < 0 ? 1 : -1));
+  };
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, width: '100vw', height: '100dvh', zIndex: 110,
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+        backgroundColor: 'rgba(66, 24, 8, 0.55)',
+        animation: `battleOverlayIn 220ms ${EASE_OUT} both`,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: '#FFF1DC',
+          borderRadius: '33px 33px 0 0',
+          padding: `12px 0 calc(20px + env(safe-area-inset-bottom, 0px))`,
+          maxHeight: '92dvh', display: 'flex', flexDirection: 'column',
+          animation: `dishSheetIn 260ms ${EASE_OUT} both`,
+          boxShadow: '0 -12px 40px rgba(108,41,18,0.18)',
+        }}
+      >
+        <div style={{ width: '44px', height: '4px', borderRadius: '999px', backgroundColor: 'rgba(108,41,18,0.18)', alignSelf: 'center', flexShrink: 0 }} />
+
+        <div
+          style={{ overflow: 'hidden', flex: 1, minHeight: 0, marginTop: '12px', touchAction: 'pan-y' }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          <div style={{
+            display: 'flex', height: '100%',
+            transform: `translateX(calc(${-index * 100}% + ${drag}px))`,
+            transition: drag === 0 ? `transform 280ms ${EASE_OUT}` : 'none',
+          }}>
+            {dishes.map((dish) => {
+              const name = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
+              const desc = lang === 'uz' ? (dish.description_uz || dish.description) : dish.description;
+              const cuisine = cuisineOptions.find((c) => c.id === dish.cuisine);
+              return (
+                <div key={dish.id} style={{ flex: '0 0 100%', minWidth: 0, padding: `0 ${PAD}`, overflowY: 'auto' }}>
+                  <div style={{ position: 'relative', width: '100%', aspectRatio: '1.1', borderRadius: '28px', overflow: 'hidden', backgroundColor: '#FFF1DD' }}>
+                    <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(84px, 24vw, 120px)" />
+                    {dish.matchPercent != null && (
+                      <div style={{
+                        position: 'absolute', top: '12px', right: '12px',
+                        backgroundColor: '#F48924', color: '#fff', borderRadius: '999px',
+                        padding: '6px 12px', fontFamily: 'Inter, sans-serif', fontWeight: 800,
+                        fontSize: 'clamp(13px, 3.4vw, 15px)',
+                      }}>
+                        {dish.matchPercent}%
+                      </div>
+                    )}
+                  </div>
+                  <h2 style={{
+                    fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
+                    fontSize: dishTitleSize(name, 22, 7.4, 32), lineHeight: 1.15, letterSpacing: '-0.02em',
+                    margin: '16px 0 0',
+                  }}>
+                    {name}
+                  </h2>
+                  {cuisine && (
+                    <div style={{
+                      fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#F48924',
+                      fontSize: 'clamp(12px, 3.2vw, 14px)', marginTop: '8px',
+                    }}>
+                      {cuisine.emoji} {lang === 'uz' ? cuisine.title_uz : cuisine.title}
+                    </div>
+                  )}
+                  <p style={{
+                    fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.85,
+                    fontSize: 'clamp(14px, 3.8vw, 16px)', lineHeight: 1.45, margin: '12px 0 0',
+                  }}>
+                    {desc}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Точки мелкие, поэтому область нажатия вокруг них крупнее самой точки. */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px', flexShrink: 0 }}>
+          {dishes.map((d, i) => (
+            <button
+              key={d.id}
+              type="button"
+              aria-label={`${i + 1}`}
+              onClick={() => go(i)}
+              style={{
+                width: '30px', height: '36px', border: 'none', padding: 0, background: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <span style={{
+                display: 'block', width: i === index ? '20px' : '6px', height: '6px', borderRadius: '999px',
+                backgroundColor: i === index ? '#F48924' : 'rgba(108,41,18,0.25)',
+                transition: `width 240ms ${EASE_OUT}, background-color 240ms ${EASE_OUT}`,
+              }} />
+            </button>
+          ))}
+        </div>
+
+        {/* Из просмотра должен быть выход действием, а не только «закрыть». */}
+        <div style={{ padding: `0 ${PAD}`, flexShrink: 0, display: 'flex', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => {
+              const d = dishes[index];
+              const name = lang === 'uz' ? (d.name_uz || d.name) : d.name;
+              haptic('light');
+              void buildShareCard(d, name, t('share_card_caption'))
+                .then((blob) => shareBlob(blob, t('share_card_caption')))
+                .then((outcome) => {
+                  if (outcome === 'shared') return;
+                  setToast(t(outcome === 'downloaded' ? 'toast_share_saved' : 'toast_share_failed'));
+                  setTimeout(() => setToast(null), 2200);
+                });
+            }}
+            style={{
+              flexShrink: 0, width: '56px', height: 'clamp(54px, 12vw, 66px)', borderRadius: '999px',
+              backgroundColor: '#fff', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+              transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+            aria-label={t('btn_share_result')}
+            {...usePressScale(0.94)}
+          >
+            <IconShare />
+          </button>
+          <PressButton onClick={onClose} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
+            {t('btn_close')}
+          </PressButton>
+        </div>
+        {toast && <Toast message={toast} />}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
 // ─── Или / Или — выбор между двумя блюдами ────────────────────────────────────
 
-const PICK_ANIM_MS = 300;
+// Такт раунда: нажатие → проигравшая карточка уходит влево → из-под неё раскрывается
+// соперник, который уже лежал в колоде. Выбранная карточка не двигается вообще.
+const TAP_MS = 120;               // отклик на нажатие
+const SWIPE_DELAY_MS = 100;       // свайп стартует, пока отклик ещё доигрывает
+const SWIPE_MS = 260;             // проигравшая уходит
+const REVEAL_MS = 240;            // соперник раскрывается из-под неё
+const FINAL_PAUSE_MS = 260;       // победитель остаётся один перед экраном результата
+const HOLD_CAP_MS = 500;          // предел ожидания фотографии соперника
+const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 
-function BattleProgress({ round, total, isFinal }: { round: number; total: number; isFinal: boolean }) {
+// Сетка вкладки: шаг 4/8/12/16/20/24/32/40, поля экрана — 20.
+const GUTTER = '20px';
+const CARD_RADIUS = '33px';       // тот же крупный радиус, что у карточек на других экранах
+const SHADOW_CARD = '0 4px 16px rgba(0,0,0,0.05)';
+
+type Slot = 'top' | 'bottom';
+type BattlePhase = 'live' | 'tap' | 'swipe' | 'finish';
+type CardRole = 'idle' | 'tapped' | 'leaving' | 'hidden' | 'revealing';
+
+function BattleHeader({ round, total, isFinal }: { round: number; total: number; isFinal: boolean }) {
   const { t } = useLang();
+  const pct = Math.round(Math.min(1, isFinal ? 1 : round / total) * 100);
+  // Логотипа здесь нет намеренно: высоты мало, и она нужна фотографиям.
   return (
-    <div style={{ padding: `0 ${PAD}`, flexShrink: 0 }}>
+    <div style={{ padding: `clamp(16px, 2.6dvh, 24px) ${GUTTER} 0`, flexShrink: 0 }}>
       <div style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '8px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '12px', minHeight: '18px', marginBottom: '8px',
       }}>
         <span style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912',
-          fontSize: 'clamp(12px, 3.2vw, 14px)', letterSpacing: '-0.01em',
+          fontFamily: 'Inter, sans-serif', fontWeight: 800, minWidth: 0,
+          color: isFinal ? '#F48924' : '#6C2912', opacity: isFinal ? 1 : 0.78,
+          fontSize: 'clamp(12px, 3.2vw, 14px)',
+          letterSpacing: isFinal ? '0.1em' : '-0.01em',
+          textTransform: isFinal ? 'uppercase' : 'none',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          transition: `color 260ms ${EASE_OUT}, opacity 260ms ${EASE_OUT}`,
         }}>
           {isFinal ? t('battle_final') : t('battle_question')}
         </span>
+        {/* В финале счётчик гасится, а не удаляется — строка не должна прыгать. */}
         <span style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 700,
-          color: isFinal ? '#F48924' : 'rgba(108,41,18,0.5)', fontSize: 'clamp(12px, 3.2vw, 14px)',
+          fontFamily: 'Inter, sans-serif', fontWeight: 700, flexShrink: 0,
+          color: 'rgba(108,41,18,0.42)', fontSize: 'clamp(11px, 3vw, 13px)',
+          fontVariantNumeric: 'tabular-nums',
+          opacity: isFinal ? 0 : 1, transition: `opacity 200ms ${EASE_OUT}`,
         }}>
           {round} / {total}
         </span>
       </div>
-      <ProgressBar progress={round / total} />
+      <div style={{ height: '4px', borderRadius: '999px', backgroundColor: 'rgba(108,41,18,0.1)', overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', width: `${pct}%`, borderRadius: '999px',
+          backgroundColor: '#F48924', transition: `width 420ms ${EASE_OUT}`,
+        }} />
+      </div>
     </div>
   );
 }
 
-type PickState = 'idle' | 'won' | 'lost';
+// Ось композиции: стоит между карточками, ничего не перекрывает и никогда не двигается.
+function OrBadge({ faded }: { faded: boolean }) {
+  const { t } = useLang();
+  return (
+    <div style={{
+      alignSelf: 'center', flexShrink: 0, pointerEvents: 'none',
+      backgroundColor: '#F48924', color: '#fff',
+      borderRadius: '999px', padding: '5px 14px',
+      fontFamily: 'Inter, sans-serif', fontWeight: 800,
+      fontSize: 'clamp(10px, 2.8vw, 12px)', lineHeight: 1.2,
+      textTransform: 'uppercase', letterSpacing: '0.12em',
+      opacity: faded ? 0 : 1, transition: `opacity 200ms ${EASE_IN}`,
+    }}>
+      {t('battle_or')}
+    </div>
+  );
+}
 
-function BattleCard({ dish, state, onPick }: { dish: Dish; state: PickState; onPick(): void }) {
-  const { lang } = useLang();
+const REJECT_DISTANCE = 72;       // дальше этого свайп считается отказом
+
+function BattleCard({ dish, role, onPick, onReject }: {
+  dish: Dish; role: CardRole; onPick?(): void; onReject?(): void;
+}) {
+  const { lang, t } = useLang();
   const name = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
-  const press = usePressScale(0.97);
-  const scale = state === 'won' ? 1.02 : state === 'lost' ? 0.92 : 1;
+  const interactive = role === 'idle';
+  const cardRef = useRef<HTMLButtonElement>(null);
+  const vetoRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; moved: boolean } | null>(null);
+  const dragged = useRef(false);
+
+  // Тянуть можно только влево — это отказ. Поза пишется прямо в DOM, без ререндеров.
+  const pose = useCallback((dx: number, animate: boolean) => {
+    const el = cardRef.current;
+    if (!el) return;
+    el.style.transition = animate ? `transform 0.4s ${RETURN_EASE}` : 'none';
+    el.style.transform = dx === 0 ? 'none' : `translateX(${dx}px) rotate(${dx * 0.012}deg)`;
+    if (vetoRef.current) {
+      vetoRef.current.style.transition = animate ? 'opacity 0.3s ease' : 'none';
+      vetoRef.current.style.opacity = String(Math.min(Math.abs(dx) / REJECT_DISTANCE, 1));
+    }
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!interactive) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, moved: false };
+    dragged.current = false;
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = drag.current;
+    if (!d || !interactive) return;
+    const dx = Math.min(0, e.clientX - d.x);
+    if (dx < -4) { d.moved = true; dragged.current = true; }
+    pose(dx, false);
+  };
+  const endDrag = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = drag.current;
+    if (!d || !interactive) return;
+    drag.current = null;
+    const dx = Math.min(0, e.clientX - d.x);
+    if (dx <= -REJECT_DISTANCE) onReject?.();
+    else pose(0, true);
+  };
+
+  let transform = 'none';
+  let opacity = 1;
+  let transition = 'none';
+  if (role === 'hidden') transform = 'scale(0.98)';
+  else if (role === 'revealing') transition = `transform ${REVEAL_MS}ms ${EASE_OUT}`;
+  else if (role === 'leaving') {
+    transform = 'translateX(-130%) rotate(-3deg)';
+    opacity = 0;
+    // Карточка именно улетает: прозрачность падает в самом конце, уже за краем экрана.
+    transition = `transform ${SWIPE_MS}ms ${EASE_IN}, opacity 70ms linear ${SWIPE_MS - 70}ms`;
+  }
+
   return (
     <button
+      ref={cardRef}
       type="button"
-      onClick={onPick}
-      disabled={state !== 'idle'}
+      onClick={interactive ? () => { if (dragged.current) { dragged.current = false; return; } onPick?.(); } : undefined}
+      disabled={!interactive}
       aria-label={name}
+      aria-hidden={role === 'hidden' || role === 'revealing'}
+      tabIndex={interactive ? 0 : -1}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={() => { drag.current = null; pose(0, true); }}
       style={{
-        flex: 1, minHeight: 0, width: '100%', padding: 0, cursor: 'pointer',
-        display: 'flex', flexDirection: 'column',
-        borderRadius: '33px', overflow: 'hidden', backgroundColor: '#fff', textAlign: 'left',
-        border: state === 'won' ? '2.5px solid #F48924' : '2.5px solid transparent',
-        boxShadow: state === 'won'
-          ? '0 12px 16px rgba(244,137,36,0.18)'
-          : '0 4px 16px rgba(0,0,0,0.05)',
-        opacity: state === 'lost' ? 0 : 1,
-        transform: `scale(${scale})`,
-        transition: `opacity ${PICK_ANIM_MS}ms cubic-bezier(0.4, 0, 1, 1), transform ${PICK_ANIM_MS}ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s, border-color 0.2s`,
+        position: 'absolute', inset: 0, width: '100%', padding: 0,
+        cursor: interactive ? 'pointer' : 'default', touchAction: 'pan-y',
+        borderRadius: CARD_RADIUS, overflow: 'hidden', backgroundColor: '#FFF1DD', textAlign: 'left',
+        border: 'none', boxShadow: SHADOW_CARD,
+        transformOrigin: 'top center',
+        transform, opacity, transition,
+        animation: role === 'tapped' ? `battleTap ${TAP_MS}ms ${EASE_OUT} both` : undefined,
+        willChange: 'transform, opacity',
       }}
-      {...(state === 'idle' ? press : {})}
     >
-      <div style={{ position: 'relative', flex: 1, minHeight: 0, width: '100%', overflow: 'hidden' }}>
-        <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(64px, 18vw, 96px)" />
-      </div>
-      <div style={{ padding: 'clamp(10px, 2vh, 16px) clamp(14px, 4vw, 20px)', flexShrink: 0, width: '100%' }}>
+      <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(64px, 18vw, 96px)" />
+      {/* Градиент ровно под подпись: фотография остаётся читаемой, текст — тоже. */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        padding: '0 20px 18px',
+        paddingTop: '72px',
+        background: 'linear-gradient(to top, rgba(54,18,4,0.88) 0%, rgba(54,18,4,0.62) 42%, rgba(54,18,4,0) 100%)',
+      }}>
         <div style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
-          fontSize: 'clamp(16px, 4.4vw, 22px)', lineHeight: 1.15, letterSpacing: '-0.02em',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff',
+          fontSize: dishTitleSize(name, 18, 5.4, 26), lineHeight: 1.15, letterSpacing: '-0.02em',
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          textShadow: '0 2px 12px rgba(40,12,2,0.4)',
         }}>
           {name}
         </div>
+      </div>
+
+      {/* Отказ: карточка заливается красным и прямо говорит, что произойдёт. */}
+      <div
+        ref={vetoRef}
+        style={{
+          position: 'absolute', inset: 0, opacity: role === 'leaving' ? 1 : 0,
+          backgroundColor: 'rgba(232, 57, 90, 0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}
+      >
+        <span style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff',
+          fontSize: 'clamp(20px, 6vw, 28px)', letterSpacing: '-0.02em',
+          textShadow: '0 2px 14px rgba(80,10,24,0.45)',
+        }}>
+          {t('battle_reject')}
+        </span>
       </div>
     </button>
   );
 }
 
-function BattleIntro({ onStart }: { onStart(): void }) {
+// Подсказка поверх настоящей игры: отдельного экрана «Начать» нет, механика объясняется
+// на том же интерфейсе, на котором её сразу и применяют. Слой уходит в document.body —
+// иначе он остался бы внутри прокручиваемой области и нижняя навигация была бы поверх него.
+// Место сверху намеренно свободно: туда позже встанет персонаж.
+function BattleOnboarding({ spotlight, onDone }: { spotlight: DOMRect | null; onDone(): void }) {
   const { t } = useLang();
-  return (
-    <Screen>
-      <div
-        className="flex flex-col items-center justify-center flex-1 text-center"
-        style={{ padding: `clamp(28px,6vh,52px) ${PAD} 16px`, gap: 'clamp(18px, 3.5vh, 28px)' }}
-      >
-        <OmNomLogo size="md" />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(10px, 3vw, 16px)' }}>
-          {['🍛', '🍔'].map((e, i) => (
-            <React.Fragment key={e}>
-              {i === 1 && (
-                <span style={{
-                  fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#F48924',
-                  fontSize: 'clamp(13px, 3.4vw, 16px)', textTransform: 'uppercase', letterSpacing: '0.04em',
-                }}>
-                  {t('battle_or')}
-                </span>
-              )}
-              <div style={{
-                width: 'clamp(96px, 30vw, 128px)', aspectRatio: '1', borderRadius: '33px',
-                backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 'clamp(44px, 13vw, 60px)', lineHeight: 1,
-              }}>
-                {e}
-              </div>
-            </React.Fragment>
-          ))}
-        </div>
-
-        <h1 style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
-          fontSize: 'clamp(26px, 7vw, 36px)', letterSpacing: '-0.02em', lineHeight: 1.1,
-        }}>
-          {t('battle_title')}
-        </h1>
-
-        <p style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.7,
-          fontSize: 'clamp(13px, 3.6vw, 16px)', lineHeight: 1.45, whiteSpace: 'pre-line', maxWidth: '300px',
-        }}>
-          {t('battle_subtitle')}
-        </p>
-
-        <div style={{ width: 'min(357px, 85%)' }}>
-          <PressButton onClick={onStart} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
-            {t('battle_start')}
-          </PressButton>
-        </div>
-
-        <p style={{ fontSize: '13px', color: 'rgba(108,41,18,0.55)', fontFamily: 'Inter, sans-serif' }}>
-          {t('battle_hint')}
-        </p>
-      </div>
-    </Screen>
-  );
-}
-
-function BattleResult({ dish, wins, of, onAgain, onHome }: {
-  dish: Dish; wins: number; of: number; onAgain(): void; onHome(): void;
-}) {
-  const { t, lang } = useLang();
-  const name = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
-  const desc = lang === 'uz' ? (dish.description_uz || dish.description) : dish.description;
-  return (
-    <Screen>
-      <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <OmNomLogo size="sm" />
-        </div>
-        <p style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912', opacity: 0.6,
-          fontSize: 'clamp(12px, 3.2vw, 14px)', marginTop: 'clamp(12px, 2.5dvh, 20px)',
-          textTransform: 'uppercase', letterSpacing: '0.04em',
-        }}>
-          {t('battle_result_title')}
-        </p>
-      </div>
-
-      <div style={{
-        margin: `clamp(8px, 2dvh, 18px) ${PAD} 0`, borderRadius: '40px', backgroundColor: '#fff',
-        overflow: 'hidden', flexShrink: 0, boxShadow: '0 14px 8px rgba(0,0,0,0.07)',
-      }}>
-        {/* Шире, чем на экране результата квиза: здесь под карточкой две кнопки, и при
-            квадратной картинке «Сыграть ещё раз» уезжает под нижнюю навигацию. */}
-        <div style={{
-          position: 'relative', width: '100%', aspectRatio: '1.2', backgroundColor: '#FFF1DD',
-          overflow: 'hidden', borderRadius: '40px 40px 0 0',
-        }}>
-          <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(96px, 28vw, 150px)" />
-        </div>
-        <div style={{ padding: 'clamp(12px, 2dvh, 20px) clamp(16px, 4vw, 22px) clamp(14px, 2.2dvh, 22px)', textAlign: 'center' }}>
-          <h1 style={{
-            fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
-            fontSize: 'clamp(20px, 7.4vw, 32px)', lineHeight: '1.15', letterSpacing: '-0.02em',
-          }}>
-            {name}
-          </h1>
-          {wins > 0 && (
-            <div style={{
-              fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#F48924',
-              fontSize: 'clamp(12px, 3.2vw, 15px)', marginTop: 'clamp(6px, 1dvh, 10px)',
-            }}>
-              {wins} {t('battle_wins')} {of}
-            </div>
-          )}
-          <p style={{
-            fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7,
-            fontSize: 'clamp(13px, 3.5vw, 16px)', marginTop: 'clamp(8px, 1.5dvh, 14px)', lineHeight: '21px',
-          }}>
-            {desc}
-          </p>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: `clamp(14px, 2.8dvh, 26px) ${PAD} clamp(8px, 1.5dvh, 14px)`, flexShrink: 0 }}>
-        <PressButton onClick={onAgain} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
-          {t('battle_again')}
-        </PressButton>
-        <button
-          type="button"
-          onClick={onHome}
-          style={{
-            width: '100%', height: '48px', borderRadius: '100px', background: 'none',
-            border: '2px solid rgba(108,41,18,0.2)', cursor: 'pointer',
-            fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912',
-            fontSize: 'clamp(13px, 3.5vw, 15px)',
-          }}
-        >
-          {t('battle_home')}
-        </button>
-      </div>
-    </Screen>
-  );
-}
-
-export function FoodBattleScreen({ dishes, allergens, onWinner, onGoHome }: {
-  dishes: readonly Dish[];
-  allergens: readonly string[];
-  onWinner(dish: Dish): void;
-  onGoHome(): void;
-}) {
-  const { t } = useLang();
-  const [session, setSession] = useState<BattleSession | null>(null);
-  const [picked, setPicked] = useState<string | null>(null);
-  const busy = useRef(false);
+  const [leaving, setLeaving] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reported = useRef<string | null>(null);
-
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  const start = () => {
-    busy.current = false;
-    setPicked(null);
-    setSession(createBattleSession(dishes, allergens));
+  const dismiss = () => {
+    if (leaving) return;
+    setLeaving(true);
+    timer.current = setTimeout(onDone, 260);
   };
+
+  const pad = 10;
+  const scrim = 'rgba(66, 24, 8, 0.72)';
+
+  return createPortal(
+    <div style={{
+      position: 'fixed', inset: 0, width: '100vw', height: '100dvh', zIndex: 100,
+      opacity: leaving ? 0 : 1,
+      transition: `opacity 260ms ${EASE_IN}`,
+      animation: `battleOverlayIn 260ms ${EASE_OUT} both`,
+    }}>
+      {/* Карточки подсвечены: тень с огромным разбросом затемняет всё, кроме их области. */}
+      {spotlight ? (
+        <div style={{
+          position: 'absolute',
+          left: spotlight.left - pad, top: spotlight.top - pad,
+          width: spotlight.width + pad * 2, height: spotlight.height + pad * 2,
+          borderRadius: '40px',
+          backgroundColor: 'rgba(66, 24, 8, 0.42)',
+          boxShadow: `0 0 0 9999px ${scrim}`,
+          border: '1.5px solid rgba(255, 241, 220, 0.26)',
+        }} />
+      ) : (
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: scrim }} />
+      )}
+
+      {/* Мягкое затемнение под текстом: без видимых границ, просто чтобы подпись читалась
+          поверх любой фотографии. */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, top: '22%', height: '46%',
+        background: 'radial-gradient(ellipse at center, rgba(40,14,3,0.86) 0%, rgba(40,14,3,0.58) 52%, rgba(40,14,3,0) 80%)',
+      }} />
+
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        padding: `clamp(24px, 5dvh, 44px) ${PAD} calc(clamp(16px, 2.6dvh, 24px) + 93px + env(safe-area-inset-bottom, 0px))`,
+      }}>
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: '12px', textAlign: 'center', maxWidth: '310px',
+        }}>
+          <h2 style={{
+            fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff',
+            fontSize: 'clamp(24px, 7vw, 32px)', lineHeight: 1.15, letterSpacing: '-0.02em', margin: 0,
+            textShadow: '0 2px 20px rgba(44,14,2,0.55)',
+          }}>
+            {t('battle_tutorial_title')}
+          </h2>
+          <p style={{
+            fontFamily: 'Inter, sans-serif', fontWeight: 500, color: 'rgba(255,255,255,0.84)',
+            fontSize: 'clamp(13px, 3.7vw, 16px)', lineHeight: 1.45, margin: 0, whiteSpace: 'pre-line',
+            textShadow: '0 2px 16px rgba(44,14,2,0.55)',
+          }}>
+            {t('battle_tutorial_sub')}
+          </p>
+        </div>
+        <div style={{ width: 'min(260px, 74%)', flexShrink: 0 }}>
+          <PressButton onClick={dismiss} bg="#F48924" color="#fff" shadow="0 14px 30px rgba(0,0,0,0.3)">
+            {t('battle_tutorial_cta')}
+          </PressButton>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Чем блюдо ближе к тому, что человек выбирал весь раунд, тем выше в подборке.
+// Движок не трогаем — используем его же готовую оценку близости.
+function similarToTaste(session: BattleSession, winner: Dish): MatchedDish[] {
+  const seen = new Set(session.seenIds);
+  return session.pool
+    .filter((d) => d.id !== winner.id && !seen.has(d.id) && d.image)
+    .map((d) => ({ d, score: affinity(d, session.bias) + d.prominence * 0.3 }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(({ d }) => ({ ...d, matchPercent: null }));
+}
+
+export function FoodBattleScreen({ dishes, allergens, onWinner, onChoice, onGoHome }: {
+  dishes: readonly Dish[];
+  allergens: readonly string[] | null;
+  onWinner(dish: Dish): void;
+  onChoice(winner: Dish, loser: Dish, round: number): void;
+  onGoHome(): void;
+}) {
+  const { t, lang } = useLang();
+  const [session, setSession] = useState<BattleSession | null>(null);
+  // Слоты — состояние интерфейса, а не движка: «верх» и «низ» ничего не значат для
+  // подбора, но выбранная карточка обязана остаться там, где на неё нажали.
+  const [slots, setSlots] = useState<{ top: Dish; bottom: Dish } | null>(null);
+  const [phase, setPhase] = useState<BattlePhase>('live');
+  const [picked, setPicked] = useState<Slot | null>(null);
+  const [tutorial, setTutorial] = useState(false);
+  const [spotlight, setSpotlight] = useState<DOMRect | null>(null);
+  const pairRef = useRef<HTMLDivElement>(null);
+  const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const run = useRef(0);
+  const reported = useRef<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    isBattleOnboardingSeen().then((seen) => { if (alive && !seen) setTutorial(true); });
+    return () => { alive = false; };
+  }, []);
+
+  const allergenKey = allergens === null ? null : [...allergens].sort().join('|');
+  const allergensRef = useRef(allergens);
+  allergensRef.current = allergens;
+
+  const stopTimers = useCallback(() => {
+    for (const id of timers.current) clearTimeout(id);
+    timers.current = [];
+    run.current += 1;
+  }, []);
+  const after = useCallback((ms: number, fn: () => void) => {
+    timers.current.push(setTimeout(fn, ms));
+  }, []);
+
+  useEffect(() => stopTimers, [stopTimers]);
+
+  const start = useCallback(() => {
+    stopTimers();
+    setPhase('live');
+    setPicked(null);
+    const fresh = createBattleSession(dishes, allergensRef.current ?? []);
+    setSession(fresh);
+    setSlots(fresh.pair ? { top: fresh.pair[0], bottom: fresh.pair[1] } : null);
+  }, [dishes, stopTimers]);
+
+  // Игра начинается сразу при открытии вкладки — но только когда известны ограничения
+  // из профиля, иначе первая пара собралась бы без них.
+  useEffect(() => {
+    if (allergenKey === null) return;
+    start();
+  }, [allergenKey, start]);
 
   // Победитель уходит в историю один раз за игру.
   useEffect(() => {
@@ -1463,27 +2096,99 @@ export function FoodBattleScreen({ dishes, allergens, onWinner, onGoHome }: {
     if (!winner) reported.current = null;
   }, [session?.winner, onWinner]);
 
-  const pick = (id: string) => {
-    // Быстрые повторные тапы не должны проматывать два раунда за один выбор.
-    if (!session || busy.current || picked) return;
-    busy.current = true;
-    setPicked(id);
-    timer.current = setTimeout(() => {
-      setSession((prev) => (prev ? registerChoice(prev, id) : prev));
-      setPicked(null);
-      busy.current = false;
-    }, PICK_ANIM_MS);
+  // Обе ветки считаются заранее и становятся источником истины: соперник, который лежит
+  // под карточкой, обязан совпасть с тем, кого вернёт движок после выбора, иначе
+  // раскрывшаяся карточка подменилась бы в последний момент.
+  const branches = useMemo(() => {
+    if (!session?.pair || !slots) return null;
+    const branch = (keep: Dish) => {
+      const next = registerChoice(session, keep.id);
+      const challenger = next.pair?.find((d) => d.id !== keep.id) ?? null;
+      return { session: next, challenger };
+    };
+    return { top: branch(slots.top), bottom: branch(slots.bottom) };
+  }, [session, slots]);
+
+  // Фотографии соперников грузятся, пока человек ещё выбирает.
+  useEffect(() => {
+    if (!slots) return;
+    preloadImage(slots.top.image);
+    preloadImage(slots.bottom.image);
+    preloadImage(branches?.top.challenger?.image ?? branches?.top.session.winner?.image);
+    preloadImage(branches?.bottom.challenger?.image ?? branches?.bottom.session.winner?.image);
+  }, [slots, branches]);
+
+  // immediate — выбор пришёл свайпом по проигравшей карточке: она уже в движении,
+  // задерживать её откликом на нажатие и ожиданием картинки нельзя.
+  const pick = (slot: Slot, immediate = false) => {
+    // Пока идёт переход, повторные жесты игнорируются: иначе один выбор промотал бы два раунда.
+    if (!session?.pair || !slots || !branches || phase !== 'live' || tutorial) return;
+    haptic('light');
+
+    const branch = branches[slot];
+    const challenger = branch.challenger;
+    onChoice(slots[slot], slots[slot === 'top' ? 'bottom' : 'top'], session.round);
+    setPicked(slot);
+
+    const leave = () => {
+      setPhase('swipe');
+      after(SWIPE_MS, () => {
+        if (!challenger) {
+          // Финал: соперника больше нет, победитель остаётся на экране один.
+          setPhase('finish');
+          after(FINAL_PAUSE_MS, () => { setSession(branch.session); setPicked(null); setPhase('live'); });
+          return;
+        }
+        // Меняется только проигравший слот. Выбранная карточка не трогается вообще.
+        setSession(branch.session);
+        setSlots(slot === 'top'
+          ? { top: slots.top, bottom: challenger }
+          : { top: challenger, bottom: slots.bottom });
+        setPicked(null);
+        setPhase('live');
+      });
+    };
+
+    if (immediate) { leave(); return; }
+
+    setPhase('tap');
+    const myRun = run.current;
+    after(SWIPE_DELAY_MS, () => {
+      // Фотография соперника должна быть готова до свайпа: пустая карточка под уходящей
+      // хуже, чем лишние сто миллисекунд ожидания.
+      void imagesReady([challenger?.image], HOLD_CAP_MS).then(() => {
+        if (run.current !== myRun) return;
+        leave();
+      });
+    });
   };
 
-  if (!session) return <BattleIntro onStart={start} />;
+  const dismissTutorial = () => {
+    markBattleOnboardingSeen();
+    setTutorial(false);
+  };
+
+  // Подсветка карточек в подсказке живёт в portal'е и о вёрстке экрана не знает —
+  // координаты области снимаем здесь.
+  useLayoutEffect(() => {
+    if (!tutorial) return;
+    const measure = () => {
+      if (pairRef.current) setSpotlight(pairRef.current.getBoundingClientRect());
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [tutorial, session]);
+
+  if (!session) return <Screen />;
 
   if (!canPlay(session)) {
     return (
       <Screen>
-        <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-          <OmNomLogo size="md" />
+        <div style={{ padding: `clamp(20px, 4dvh, 32px) ${GUTTER} 0`, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+          <OmNomLogo />
         </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: PAD, textAlign: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: GUTTER, textAlign: 'center' }}>
           <span style={{ fontSize: '64px' }}>🙈</span>
           <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912', fontSize: 'clamp(18px, 5vw, 24px)', lineHeight: 1.25, letterSpacing: '-0.02em', margin: 0 }}>
             {t('battle_empty_title')}
@@ -1497,41 +2202,82 @@ export function FoodBattleScreen({ dishes, allergens, onWinner, onGoHome }: {
   }
 
   if (session.winner) {
-    const rec = winnerRecord(session);
-    return <BattleResult dish={session.winner} wins={rec.wins} of={rec.of} onAgain={start} onHome={onGoHome} />;
+    const winner = session.winner;
+    const byId = new Map(session.pool.map((d) => [d.id, d]));
+    const beat = session.choices
+      .filter((c) => c.winnerId === winner.id)
+      .map((c) => byId.get(c.loserId))
+      .filter((d): d is Dish => !!d)
+      .map((d) => (lang === 'uz' ? (d.name_uz || d.name) : d.name));
+    return (
+      <SingleResultScreen
+        dish={{ ...winner, matchPercent: null }}
+        variant="battle"
+        beat={beat}
+        similar={similarToTaste(session, winner)}
+        onRetry={start}
+        onGoHome={onGoHome}
+      />
+    );
   }
 
-  const pair = session.pair;
-  if (!pair) return <BattleIntro onStart={start} />;
+  if (!session.pair || !slots) return <Screen />;
+
+  const roleFor = (slot: Slot): CardRole => {
+    if (picked === null) return 'idle';
+    if (picked === slot) return phase === 'tap' ? 'tapped' : 'idle';
+    return phase === 'tap' ? 'idle' : 'leaving';
+  };
+  const challengerFor = (slot: Slot): Dish | null => {
+    // Под карточкой лежит тот соперник, который придёт, если проиграет именно она.
+    const branch = branches?.[slot === 'top' ? 'bottom' : 'top'];
+    return branch?.challenger ?? null;
+  };
+  const revealing = phase === 'swipe' || phase === 'finish';
+
+  const renderSlot = (slot: Slot) => {
+    const current = slots[slot];
+    const challenger = challengerFor(slot);
+    const losing = picked !== null && picked !== slot;
+    return (
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        {challenger && (
+          <BattleCard
+            key={challenger.id}
+            dish={challenger}
+            role={losing && revealing ? 'revealing' : 'hidden'}
+          />
+        )}
+        <BattleCard
+          key={current.id}
+          dish={current}
+          role={roleFor(slot)}
+          onPick={() => pick(slot)}
+          onReject={() => pick(slot === 'top' ? 'bottom' : 'top', true)}
+        />
+      </div>
+    );
+  };
 
   return (
     <Screen>
-      <div style={{ padding: `clamp(16px, 3dvh, 26px) 0 clamp(12px, 2dvh, 18px)`, flexShrink: 0 }}>
-        <BattleProgress round={session.round} total={session.maxRounds + 1} isFinal={session.isFinal} />
+      <BattleHeader round={session.round} total={session.maxRounds + 1} isFinal={session.isFinal} />
+
+      <div
+        ref={pairRef}
+        style={{
+          flex: 1, minHeight: 0, position: 'relative',
+          display: 'flex', flexDirection: 'column', gap: 'clamp(16px, 2.8dvh, 24px)',
+          padding: `clamp(16px, 2.6dvh, 24px) ${GUTTER} clamp(20px, 3.2dvh, 28px)`,
+          pointerEvents: phase === 'live' ? 'auto' : 'none',
+        }}
+      >
+        {renderSlot('top')}
+        <OrBadge faded={phase === 'finish'} />
+        {renderSlot('bottom')}
       </div>
 
-      <div style={{
-        flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
-        gap: 'clamp(6px, 1.4vh, 12px)', padding: `0 ${PAD} clamp(12px, 2.4dvh, 22px)`,
-      }}>
-        <BattleCard
-          dish={pair[0]}
-          state={picked ? (picked === pair[0].id ? 'won' : 'lost') : 'idle'}
-          onPick={() => pick(pair[0].id)}
-        />
-        <div style={{
-          flexShrink: 0, textAlign: 'center', fontFamily: 'Inter, sans-serif', fontWeight: 900,
-          color: '#F48924', fontSize: 'clamp(12px, 3.2vw, 15px)',
-          textTransform: 'uppercase', letterSpacing: '0.08em',
-        }}>
-          {t('battle_or')}
-        </div>
-        <BattleCard
-          dish={pair[1]}
-          state={picked ? (picked === pair[1].id ? 'won' : 'lost') : 'idle'}
-          onPick={() => pick(pair[1].id)}
-        />
-      </div>
+      {tutorial && <BattleOnboarding spotlight={spotlight} onDone={dismissTutorial} />}
     </Screen>
   );
 }
@@ -1546,20 +2292,33 @@ const HISTORY_MODE_KEYS: Record<HistoryMode, TranslationKey> = {
   battle: 'history_mode_battle',
 };
 
-export function HistoryScreen({ history, dishById }: { history: HistoryItem[]; dishById: ReadonlyMap<string, Dish> }) {
+export function HistoryScreen({ history, dishById, onClearHistory }: {
+  history: HistoryItem[]; dishById: ReadonlyMap<string, Dish>; onClearHistory(): Promise<void>;
+}) {
   const { t, lang } = useLang();
-  return (
-    <Screen>
-      <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'clamp(12px, 2.5dvh, 20px)' }}>
-          <OmNomLogo size="md" />
-        </div>
-        <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em' }}>
-          {t('history_title')}
-        </h2>
+  const [confirming, setConfirming] = useState(false);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  // Открыть можно только те записи, блюдо которых ещё есть в каталоге.
+  const openable = history
+    .map((item) => dishById.get(item.dishId))
+    .filter((d): d is Dish => !!d)
+    .map((d) => ({ ...d, matchPercent: null }));
+  const header = (
+    <StickyFadeHeader>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: LOGO_GAP }}>
+        <OmNomLogo />
       </div>
+      <h2 style={SCREEN_TITLE}>
+        {t('history_title')}
+      </h2>
+    </StickyFadeHeader>
+  );
 
+  return (
+    <Screen fill>
       {history.length === 0 ? (
+        <>
+        {header}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: PAD }}>
           <img
             src="/assets/char-history.png"
@@ -1580,13 +2339,33 @@ export function HistoryScreen({ history, dishById }: { history: HistoryItem[]; d
             </p>
           </div>
         </div>
+        </>
       ) : (
-        <div style={{ flex: 1, overflowY: 'auto', padding: `12px ${PAD}`, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', alignContent: 'start' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {header}
+        <div style={{
+          padding: `0 ${PAD}`, paddingBottom: NAV_SPACE,
+          display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', alignContent: 'start',
+        }}>
           {history.map((item) => {
             const dish = dishById.get(item.dishId);
             const itemName = dish ? (lang === 'uz' ? dish.name_uz || dish.name : dish.name) : item.name;
+            const openAt = dish ? openable.findIndex((d) => d.id === dish.id) : -1;
             return (
-              <div key={item.id} style={{ borderRadius: '33px', backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.05)', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                key={item.id}
+                type="button"
+                disabled={openAt < 0}
+                onClick={() => openAt >= 0 && setOpenIndex(openAt)}
+                aria-label={itemName}
+                style={{
+                  borderRadius: '33px', backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+                  padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px', border: 'none',
+                  cursor: openAt >= 0 ? 'pointer' : 'default', textAlign: 'center',
+                  transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+                }}
+                {...(openAt >= 0 ? usePressScale(0.97) : {})}
+              >
                 <div style={{ position: 'relative' }}>
                   <div style={{ position: 'relative', width: '100%', aspectRatio: '1', borderRadius: '16px', overflow: 'hidden' }}>
                     <DishImage image={dish?.image ?? item.image} emoji={dish?.emoji ?? '🍽️'} alt={itemName} emojiSize="clamp(44px, 12vw, 60px)" />
@@ -1606,16 +2385,115 @@ export function HistoryScreen({ history, dishById }: { history: HistoryItem[]; d
                   <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(11px, 3vw, 14px)', lineHeight: 1.25, letterSpacing: '-0.01em' }}>
                     {itemName}
                   </div>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.55, fontSize: 'clamp(10px, 2.5vw, 13px)', marginTop: '4px' }}>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.75, fontSize: 'clamp(11px, 2.9vw, 13px)', marginTop: '4px' }}>
                     {item.mode ? `${t(HISTORY_MODE_KEYS[item.mode] ?? 'history_mode_meal')} · ` : ''}{item.date}
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
+
+        {/* Управление историей живёт рядом с самой историей, а не в настройках профиля,
+            и по массе совпадает с карточкой результата. */}
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          style={{
+            // Ровно одна ячейка сетки: в одиночестве карточка не растягивается на строку,
+            // а внутренняя структура повторяет карточку блюда, поэтому совпадает и высота.
+            gridColumn: 'span 1', width: 'auto',
+            borderRadius: '33px', backgroundColor: '#E8395A',
+            border: 'none', cursor: 'pointer', padding: '14px',
+            display: 'flex', flexDirection: 'column', gap: '10px',
+            boxShadow: '0 4px 16px rgba(232,57,90,0.22)',
+            transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+          {...usePressScale(0.96)}
+        >
+          <div style={{ width: '100%', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <IconTrash color="#fff" size={38} />
+          </div>
+          <span style={{
+            fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff',
+            fontSize: 'clamp(11px, 3vw, 14px)', lineHeight: 1.25, textAlign: 'center', letterSpacing: '-0.01em',
+          }}>
+            {t('profile_clear_history')}
+          </span>
+        </button>
+        </div>
         </div>
       )}
+
+      {openIndex !== null && openable.length > 0 && (
+        <DishSheet dishes={openable} index={openIndex} onIndex={setOpenIndex} onClose={() => setOpenIndex(null)} />
+      )}
+
+      {confirming && (
+        <ConfirmSheet
+          title={t('clear_history_confirm_title')}
+          subtitle={t('clear_history_confirm_subtitle')}
+          confirmLabel={t('btn_clear_history')}
+          cancelLabel={t('btn_cancel')}
+          onConfirm={async () => { await onClearHistory(); setConfirming(false); }}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
     </Screen>
+  );
+}
+
+// Подтверждение разрушающего действия — тот же язык, что у развёрнутого просмотра блюда.
+function ConfirmSheet({ title, subtitle, confirmLabel, cancelLabel, onConfirm, onCancel }: {
+  title: string; subtitle: string; confirmLabel: string; cancelLabel: string;
+  onConfirm(): void; onCancel(): void;
+}) {
+  return createPortal(
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, width: '100vw', height: '100dvh', zIndex: 110,
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+        backgroundColor: 'rgba(66, 24, 8, 0.55)',
+        animation: `battleOverlayIn 220ms ${EASE_OUT} both`,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: '#FFF1DC', borderRadius: '33px 33px 0 0',
+          padding: `28px ${PAD} calc(20px + env(safe-area-inset-bottom, 0px))`,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center',
+          animation: `dishSheetIn 260ms ${EASE_OUT} both`,
+          boxShadow: '0 -12px 40px rgba(108,41,18,0.18)',
+        }}
+      >
+        <span style={{ fontSize: '44px' }}>🗑️</span>
+        <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912', fontSize: 'clamp(18px, 5vw, 22px)', lineHeight: 1.3, letterSpacing: '-0.02em', margin: 0, maxWidth: '300px' }}>
+          {title}
+        </p>
+        <p style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.6, fontSize: 'clamp(13px, 3.5vw, 15px)', lineHeight: 1.5, margin: 0, maxWidth: '300px' }}>
+          {subtitle}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginTop: '12px' }}>
+          <PressButton onClick={onConfirm} bg="#E8395A" color="#fff" shadow="0 12px 28px rgba(232,57,90,0.3)">
+            {confirmLabel}
+          </PressButton>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              width: '100%', height: '48px', borderRadius: '100px', background: 'none',
+              border: '2px solid rgba(108,41,18,0.2)', cursor: 'pointer',
+              fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912',
+              fontSize: 'clamp(13px, 3.5vw, 15px)',
+            }}
+          >
+            {cancelLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1701,10 +2579,10 @@ export function MapScreen({ places }: { places: readonly Place[] }) {
     <Screen>
       <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'clamp(12px, 2.5dvh, 20px)' }}>
-          <OmNomLogo size="md" />
+          <OmNomLogo />
         </div>
         {places.length > 0 && (
-          <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em' }}>
+          <h2 style={SCREEN_TITLE}>
             {t('map_title')}
           </h2>
         )}
@@ -1774,13 +2652,11 @@ const PROFILE_ITEMS = [
   { id: 'lang',   icon: '/assets/icons/settings-language.svg' },
   { id: 'notify', icon: '/assets/icons/settings-notification.svg' },
   { id: 'share',  icon: '/assets/icons/settings-share.svg' },
-  { id: 'clear-history', icon: 'trash' },
 ] as const;
 
 type ProfileItemId = typeof PROFILE_ITEMS[number]['id'];
 
 const PROFILE_LABEL_KEYS: Record<ProfileItemId, TranslationKey> = {
-  'clear-history': 'profile_clear_history',
   diet:   'profile_diet',
   lang:   'profile_lang',
   notify: 'profile_notify',
@@ -1914,11 +2790,10 @@ function ProfileUser() {
   );
 }
 
-type ProfileSubPage = 'none' | 'diet' | 'language' | 'clear-history';
+type ProfileSubPage = 'none' | 'diet' | 'language';
 
-export function ProfileScreen({ onSubPageChange, onClearHistory }: {
+export function ProfileScreen({ onSubPageChange }: {
   onSubPageChange?: (inSubPage: boolean) => void;
-  onClearHistory?: () => Promise<void>;
 }) {
   const { lang, setLang, t } = useLang();
   const [subPage, setSubPage] = useState<ProfileSubPage>('none');
@@ -1956,12 +2831,6 @@ export function ProfileScreen({ onSubPageChange, onClearHistory }: {
     }
   };
 
-  const handleConfirmClearHistory = async () => {
-    await onClearHistory?.();
-    goToSubPage('none');
-    showToast(t('history_cleared_toast'));
-  };
-
   const langLabel = lang === 'uz' ? 'Ozbekcha' : 'Русский';
 
   return (
@@ -1978,9 +2847,9 @@ export function ProfileScreen({ onSubPageChange, onClearHistory }: {
           <>
             <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'clamp(12px, 2.5dvh, 20px)' }}>
-                <OmNomLogo size="md" />
+                <OmNomLogo />
               </div>
-              <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em' }}>
+              <h2 style={SCREEN_TITLE}>
                 {t('profile_title')}
               </h2>
             </div>
@@ -1998,7 +2867,6 @@ export function ProfileScreen({ onSubPageChange, onClearHistory }: {
                         if (item.id === 'diet') goToSubPage('diet');
                         else if (item.id === 'lang') goToSubPage('language');
                         else if (item.id === 'share') handleShare();
-                        else if (item.id === 'clear-history') goToSubPage('clear-history');
                       }}
                       disabled={isNotify}
                       style={{
@@ -2010,9 +2878,7 @@ export function ProfileScreen({ onSubPageChange, onClearHistory }: {
                         textAlign: 'left', opacity: isNotify ? 0.45 : 1,
                       }}
                     >
-                      {item.icon === 'trash'
-                        ? <IconTrash />
-                        : <img src={item.icon} alt="" style={{ width: '22px', height: '22px', flexShrink: 0, objectFit: 'contain' }} />}
+                      <img src={item.icon} alt="" style={{ width: '22px', height: '22px', flexShrink: 0, objectFit: 'contain' }} />
                       <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#3D1A00', fontSize: 'clamp(14px, 3.5vw, 16px)' }}>
                         {t(PROFILE_LABEL_KEYS[item.id])}
                       </span>
@@ -2077,26 +2943,6 @@ export function ProfileScreen({ onSubPageChange, onClearHistory }: {
           </>
         )}
 
-        {/* ── Clear history sub-page ───────────────────────────────────────── */}
-        {subPage === 'clear-history' && (
-          <>
-            <SubPageHeader title={t('profile_clear_history')} onBack={() => goToSubPage('none')} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: PAD, textAlign: 'center' }}>
-              <span style={{ fontSize: '52px' }}>🗑️</span>
-              <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912', fontSize: 'clamp(18px, 5vw, 22px)', lineHeight: 1.3, letterSpacing: '-0.02em', margin: 0, maxWidth: '300px' }}>
-                {t('clear_history_confirm_title')}
-              </p>
-              <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, color: '#6C2912', opacity: 0.6, fontSize: 'clamp(13px, 3.5vw, 15px)', lineHeight: 1.5, margin: 0, maxWidth: '300px' }}>
-                {t('clear_history_confirm_subtitle')}
-              </p>
-            </div>
-            <div style={{ flexShrink: 0, padding: `12px ${PAD} calc(12px + env(safe-area-inset-bottom, 0px))` }}>
-              <PressButton onClick={handleConfirmClearHistory} bg="#E8395A" color="#fff" shadow="0 12px 28px rgba(232,57,90,0.32)">
-                {t('btn_clear_history')}
-              </PressButton>
-            </div>
-          </>
-        )}
       </div>
 
       {toastMessage && <Toast message={toastMessage} />}

@@ -7,9 +7,11 @@ import {
   HistoryScreen,
   LoadingScreen,
   FoodBattleScreen,
+  NAV_SPACE,
   ModeSelectScreen,
   NoResultsScreen,
   ProfileScreen,
+  preloadImage,
   QuestionCardScreen,
   ResultsListScreen,
   SingleResultScreen,
@@ -30,6 +32,7 @@ import {
   pickRandomDish,
   Question,
   rankResults,
+  RESULT_COUNT,
   Session,
   startSession,
 } from './logic/engine';
@@ -75,7 +78,9 @@ function OmNomApp() {
   const [profileInSubPage, setProfileInSubPage] = useState(false);
   // Ограничения профиля для «Или / Или»: обновляем при входе на вкладку, чтобы правка
   // аллергенов в профиле применялась к следующей игре.
-  const [battleAllergens, setBattleAllergens] = useState<string[]>([]);
+  // null — ограничения ещё не прочитаны: «Или / Или» стартует сразу при открытии вкладки,
+  // и собирать первую пару до этого нельзя.
+  const [battleAllergens, setBattleAllergens] = useState<string[] | null>(null);
 
   const quizRef = useRef<QuizView | null>(null);
   const finalizedRef = useRef<Session | null>(null);
@@ -181,7 +186,7 @@ function OmNomApp() {
     if (finalizedRef.current === session) return;
     finalizedRef.current = session;
     setQuizView(null);
-    const own = rankResults(session);
+    const own = rankResults(session, RESULT_COUNT);
     const top = own.dishes;
     const sessionId = quizIdRef.current;
     track('test_completed', {
@@ -209,7 +214,7 @@ function OmNomApp() {
       props: { pct: top[0].matchPercent, count: top.length, exact: own.exact },
     });
     const all = session.mode === 'meal' && session.cuisine !== ANY_CUISINE
-      ? allCuisinesResults(data!.dishes, session.log, allergensRef.current).dishes
+      ? allCuisinesResults(data!.dishes, session.log, allergensRef.current, RESULT_COUNT).dishes
       : [];
     setResultVariant('quiz');
     setResults(top);
@@ -218,6 +223,34 @@ function OmNomApp() {
     pendingAnswersRef.current = { id: sessionId ?? newSessionId(), session, guessedDishId: top[0].id };
     addToHistory(top[0], session.mode, top[0].matchPercent);
     runLoading();
+  };
+
+  // Ветки следующего вопроса считаются, пока человек смотрит текущий: сам подбор остаётся
+  // динамическим — мы лишь заранее проигрываем три возможных ответа и греем картинки.
+  const branchesRef = useRef<{ questionId: string; byAnswer: Map<Answer, { session: Session; question: Question | null }> } | null>(null);
+  // Для колоды на экране вопроса: что окажется следующим при каждом ответе.
+  const [nextByAnswer, setNextByAnswer] = useState<Partial<Record<Answer, Question | null>>>({});
+
+  const precomputeBranches = (session: Session, question: Question) => {
+    if (!data) return;
+    const byAnswer = new Map<Answer, { session: Session; question: Question | null }>();
+    const build = () => {
+      for (const answer of ['yes', 'no', 'any'] as const) {
+        const next = applyAnswer(session, question, answer);
+        const nq = isFinished(data.questions, next) ? null : pickNextQuestion(data.questions, next);
+        byAnswer.set(answer, { session: next, question: nq });
+        preloadImage(nq?.image);
+      }
+      branchesRef.current = { questionId: question.id, byAnswer };
+      setNextByAnswer({
+        yes: byAnswer.get('yes')?.question ?? null,
+        no: byAnswer.get('no')?.question ?? null,
+        any: byAnswer.get('any')?.question ?? null,
+      });
+    };
+    // Считаем после отрисовки текущего вопроса, чтобы не задерживать его появление.
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(build, { timeout: 400 });
+    else setTimeout(build, 0);
   };
 
   const showQuestion = (session: Session, question: Question, prevProgress: number) => {
@@ -235,6 +268,8 @@ function OmNomApp() {
       progress: nextProgress(prevProgress, data!.questions, session),
     });
     setFlowScreen('question');
+    setNextByAnswer({});
+    precomputeBranches(session, question);
   };
 
   const beginQuiz = async (mode: Mode, cuisine: string) => {
@@ -262,7 +297,15 @@ function OmNomApp() {
   const handleAnswer = useCallback((answer: Answer) => {
     const view = quizRef.current;
     if (!view || !data) return;
-    const next = applyAnswer(view.session, view.question, answer);
+    // Если ветка уже просчитана — берём её, иначе считаем на месте: подбор один и тот же.
+    const ready = branchesRef.current?.questionId === view.question.id
+      ? branchesRef.current.byAnswer.get(answer)
+      : undefined;
+    const next = ready?.session ?? applyAnswer(view.session, view.question, answer);
+    const nq = ready
+      ? ready.question
+      : (isFinished(data.questions, next) ? null : pickNextQuestion(data.questions, next));
+    branchesRef.current = null;
     track('question_answered', {
       session_id: quizIdRef.current,
       mode: next.mode,
@@ -272,7 +315,6 @@ function OmNomApp() {
       question_index: view.session.swipes + 1,
       props: { tag: view.question.tag },
     });
-    const nq = isFinished(data.questions, next) ? null : pickNextQuestion(data.questions, next);
     if (!nq) finalizeQuiz(next);
     else showQuestion(next, nq, view.progress);
   }, [data]);
@@ -307,6 +349,14 @@ function OmNomApp() {
     setFlowScreen('single-result');
   };
 
+  const handleBattleChoice = useCallback((winner: Dish, loser: Dish, round: number) => {
+    track('battle_choice', {
+      dish_id: winner.id,
+      cuisine: winner.cuisine,
+      props: { loser_id: loser.id, loser_cuisine: loser.cuisine, round },
+    });
+  }, []);
+
   const handleBattleWinner = useCallback((dish: Dish) => {
     track('battle_winner', { dish_id: dish.id, cuisine: dish.cuisine });
     addToHistory(dish, 'battle', null);
@@ -317,6 +367,7 @@ function OmNomApp() {
   const handleTabChange = (tab: TabScreen) => {
     if (tab !== 'profile') setProfileInSubPage(false);
     if (tab === 'battle') {
+      setBattleAllergens(null);
       getAllergens().then(setBattleAllergens).catch(() => setBattleAllergens([]));
       track('battle_opened');
     }
@@ -363,18 +414,19 @@ function OmNomApp() {
   if (!data) {
     content = dataError ? <AppErrorScreen onRetry={initApp} /> : <AppLoadingScreen />;
   } else if (activeTab === 'history') {
-    content = <HistoryScreen history={history} dishById={data.dishById} />;
+    content = <HistoryScreen history={history} dishById={data.dishById} onClearHistory={handleClearHistory} />;
   } else if (activeTab === 'battle') {
     content = (
       <FoodBattleScreen
         dishes={data.dishes}
         allergens={battleAllergens}
         onWinner={handleBattleWinner}
+        onChoice={handleBattleChoice}
         onGoHome={handleGoHome}
       />
     );
   } else if (activeTab === 'profile') {
-    content = <ProfileScreen onSubPageChange={setProfileInSubPage} onClearHistory={handleClearHistory} />;
+    content = <ProfileScreen onSubPageChange={setProfileInSubPage} />;
   } else if (flowScreen === 'start') {
     content = <StartScreen onStart={handleStart} onRandomizer={() => handleRandomizer(false)} />;
   } else if (flowScreen === 'mode') {
@@ -392,9 +444,8 @@ function OmNomApp() {
       <QuestionCardScreen
         question={quiz.question}
         isLast={quiz.isLast}
-        progress={quiz.progress}
-        questionNumber={quiz.session.swipes + 1}
-        remaining={quiz.remaining}
+        nearEnd={quiz.remaining <= 2}
+        nextByAnswer={nextByAnswer}
         onAnswer={handleAnswer}
       />
     );
@@ -440,8 +491,12 @@ function OmNomApp() {
     content = <NoResultsScreen onRetry={handleRetry} onGoHome={handleGoHome} />;
   }
 
+  // Экраны со своей прокруткой уводят контент под панель и сами добавляют отступ снизу;
+  // остальным место под панель резервирует контейнер.
+  const underNav = activeTab === 'history' || (activeTab === 'home' && flowScreen === 'results');
+
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+    <div style={{ width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', height: '100dvh' }}>
       {/* key re-mounts on screen change → screenFadeIn; the quiz keeps one key between questions */}
       <div
         key={screenKey}
@@ -450,6 +505,7 @@ function OmNomApp() {
           overflowY: 'auto',
           overflowX: 'hidden',
           backgroundColor: '#FFF1DC',
+          paddingBottom: showNav && !underNav ? NAV_SPACE : 0,
           animation: 'screenFadeIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
         }}
       >
@@ -458,11 +514,11 @@ function OmNomApp() {
 
       <div
         style={{
-          flexShrink: 0,
-          overflow: 'hidden',
-          maxHeight: showNav ? '120px' : '0px',
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          zIndex: 50,
+          transform: showNav ? 'translateY(0)' : 'translateY(110%)',
           opacity: showNav ? 1 : 0,
-          transition: 'max-height 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+          transition: 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
           pointerEvents: showNav ? 'auto' : 'none',
         }}
       >

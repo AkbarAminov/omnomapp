@@ -107,6 +107,9 @@ export function isCravingQuestion(q: Question): boolean {
 export const LOCAL_WEIGHT = 0.5;
 const PRIORITY_TIE = 0.03;
 const TOP_N = 3;
+// Сколько вариантов показываем на экране результатов. Отдельно от TOP_N: тот участвует
+// в правиле остановки (top3Share), и менять его ради вёрстки нельзя.
+export const RESULT_COUNT = 5;
 
 // Results below this honest match percent are not shown.
 export const RESULT_MIN_PERCENT = 50;
