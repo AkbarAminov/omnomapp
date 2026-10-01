@@ -13,7 +13,9 @@ export type EventName =
   | 'other_cuisine_opened'
   | 'recommendation_rejected'
   | 'test_abandoned'
-  | 'random_selected';
+  | 'random_selected'
+  | 'battle_opened'
+  | 'battle_winner';
 
 export type EventFields = {
   session_id?: string | null;

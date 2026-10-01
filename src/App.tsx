@@ -6,7 +6,7 @@ import {
   CuisineSelectionScreen,
   HistoryScreen,
   LoadingScreen,
-  MapScreen,
+  FoodBattleScreen,
   ModeSelectScreen,
   NoResultsScreen,
   ProfileScreen,
@@ -41,7 +41,7 @@ import { loadSettings } from './logic/settingsStorage';
 import { LangProvider } from './locales/LangContext';
 
 export type FlowScreen = 'start' | 'mode' | 'cuisine' | 'question' | 'loading' | 'single-result' | 'results' | 'no-results';
-export type TabScreen = 'home' | 'history' | 'map' | 'profile';
+export type TabScreen = 'home' | 'history' | 'battle' | 'profile';
 
 type QuizView = { session: Session; question: Question; isLast: boolean; remaining: number; progress: number };
 
@@ -73,6 +73,9 @@ function OmNomApp() {
   const allergensRef = useRef<string[]>([]);
   const randomDishRef = useRef<Dish | null>(null);
   const [profileInSubPage, setProfileInSubPage] = useState(false);
+  // Ограничения профиля для «Или / Или»: обновляем при входе на вкладку, чтобы правка
+  // аллергенов в профиле применялась к следующей игре.
+  const [battleAllergens, setBattleAllergens] = useState<string[]>([]);
 
   const quizRef = useRef<QuizView | null>(null);
   const finalizedRef = useRef<Session | null>(null);
@@ -304,8 +307,19 @@ function OmNomApp() {
     setFlowScreen('single-result');
   };
 
+  const handleBattleWinner = useCallback((dish: Dish) => {
+    track('battle_winner', { dish_id: dish.id, cuisine: dish.cuisine });
+    addToHistory(dish, 'battle', null);
+    flushEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleTabChange = (tab: TabScreen) => {
     if (tab !== 'profile') setProfileInSubPage(false);
+    if (tab === 'battle') {
+      getAllergens().then(setBattleAllergens).catch(() => setBattleAllergens([]));
+      track('battle_opened');
+    }
     if (tab === 'home') {
       resetState();
       setFlowScreen('start');
@@ -350,8 +364,15 @@ function OmNomApp() {
     content = dataError ? <AppErrorScreen onRetry={initApp} /> : <AppLoadingScreen />;
   } else if (activeTab === 'history') {
     content = <HistoryScreen history={history} dishById={data.dishById} />;
-  } else if (activeTab === 'map') {
-    content = <MapScreen places={data.places} />;
+  } else if (activeTab === 'battle') {
+    content = (
+      <FoodBattleScreen
+        dishes={data.dishes}
+        allergens={battleAllergens}
+        onWinner={handleBattleWinner}
+        onGoHome={handleGoHome}
+      />
+    );
   } else if (activeTab === 'profile') {
     content = <ProfileScreen onSubPageChange={setProfileInSubPage} onClearHistory={handleClearHistory} />;
   } else if (flowScreen === 'start') {

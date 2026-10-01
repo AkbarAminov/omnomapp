@@ -4,7 +4,7 @@ const ru = {
   // ── Navigation ──────────────────────────────────────────────────────────────
   nav_home:    'Главная',
   nav_history: 'История',
-  nav_map:     'Карта',
+  nav_battle:  'Или / Или',
   nav_profile: 'Профиль',
 
   // ── App loading / error (initial dish fetch) ──────────────────────────────────
@@ -67,6 +67,7 @@ const ru = {
   history_mode_snack:   'Перекус',
   history_mode_dessert: 'Сладкое',
   history_mode_random:  'Рандомайзер',
+  history_mode_battle:  'Или / Или',
 
   // ── Map ──────────────────────────────────────────────────────────────────────
   map_title:    'Заведения',
@@ -107,6 +108,21 @@ const ru = {
   no_results_subtitle: 'Попробуй другой режим или кухню, либо измени ограничения в профиле',
   btn_try_other:       'Выбрать заново',
 
+  // ── Или / Или ────────────────────────────────────────────────────────────────
+  battle_title:        'ИЛИ / ИЛИ',
+  battle_subtitle:     'Не знаешь, чего хочется?\nВыбирай между двумя блюдами —\nмы найдём победителя на сегодня',
+  battle_start:        'Начать',
+  battle_hint:         '6 быстрых выборов',
+  battle_question:     'Что бы ты выбрал прямо сейчас?',
+  battle_or:           'или',
+  battle_final:        'Финал',
+  battle_result_title: 'Твой выбор на сегодня',
+  battle_wins:         'побед из',
+  battle_again:        'Сыграть ещё раз',
+  battle_home:         'На главную',
+  battle_empty_title:  'Пока не из чего выбирать',
+  battle_empty_sub:    'Ограничения в профиле убрали почти все блюда',
+
   // ── Common ───────────────────────────────────────────────────────────────────
   btn_apply:    'Применить',
   toast_copied: 'Ссылка скопирована',
@@ -118,7 +134,7 @@ const uz: Record<keyof typeof ru, string> = {
   // ── Navigation ──────────────────────────────────────────────────────────────
   nav_home:    'Bosh sahifa',
   nav_history: 'Tarix',
-  nav_map:     'Xarita',
+  nav_battle:  'Yoki / Yoki',
   nav_profile: 'Profil',
 
   // ── App loading / error (initial dish fetch) ──────────────────────────────────
@@ -180,6 +196,7 @@ const uz: Record<keyof typeof ru, string> = {
   history_mode_snack:   'Tamaddi',
   history_mode_dessert: 'Shirinlik',
   history_mode_random:  'Tasodifiy',
+  history_mode_battle:  'Yoki / Yoki',
 
   // ── Map ──────────────────────────────────────────────────────────────────────
   map_title:    'Muassasalar',
@@ -219,6 +236,21 @@ const uz: Record<keyof typeof ru, string> = {
   no_results_title:    "Cheklovlaringizga mos hech narsa topilmadi",
   no_results_subtitle: "Boshqa rejim yoki oshxonani tanlang yoxud profildan cheklovlarni o'zgartiring",
   btn_try_other:       "Qaytadan tanlash",
+
+  // ── Yoki / Yoki ──────────────────────────────────────────────────────────────
+  battle_title:        'YOKI / YOKI',
+  battle_subtitle:     "Nima xohlayotganingizni bilmaysizmi?\nIkki taomdan birini tanlang —\nbugungi g'olibni biz topamiz",
+  battle_start:        'Boshlash',
+  battle_hint:         '6 ta tezkor tanlov',
+  battle_question:     'Hozir qaysi birini tanlardingiz?',
+  battle_or:           'yoki',
+  battle_final:        'Final',
+  battle_result_title: 'Bugungi tanlovingiz',
+  battle_wins:         "g'alaba,",
+  battle_again:        "Yana o'ynash",
+  battle_home:         'Bosh sahifaga',
+  battle_empty_title:  'Hozircha tanlash uchun taom yo‘q',
+  battle_empty_sub:    'Profildagi cheklovlar deyarli barcha taomlarni olib tashladi',
 
   // ── Common ───────────────────────────────────────────────────────────────────
   btn_apply:    "Qo'llash",

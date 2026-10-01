@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { getUserId } from '../lib/userId';
 import type { Dish, Mode } from './engine';
 
-export type HistoryMode = Mode | 'random';
+export type HistoryMode = Mode | 'random' | 'battle';
 
 export type HistoryItem = {
   id: string;

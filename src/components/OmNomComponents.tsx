@@ -5,6 +5,8 @@ import { TabScreen } from '../App';
 import { CuisineOption, cuisineOptions, ModeOption, modeOptions } from './omnomData';
 import type { Dish, MatchedDish, Mode, Question } from '../logic/engine';
 import { HistoryItem, HistoryMode } from '../logic/historyStorage';
+import { canPlay, createBattleSession, registerChoice, winnerRecord } from '../logic/battleEngine';
+import type { BattleSession } from '../logic/battleEngine';
 import { loadDiet, saveSettings } from '../logic/settingsStorage';
 import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
 import { openExternalLink } from '../lib/openLink';
@@ -143,7 +145,7 @@ export function BottomNav({ active = 'home', onTabChange }: BottomNavProps) {
   const items: Array<{ id: TabScreen; src: string; labelKey: TranslationKey }> = [
     { id: 'home',    src: '/assets/icons/nav-home.svg',    labelKey: 'nav_home' },
     { id: 'history', src: '/assets/icons/nav-history.svg', labelKey: 'nav_history' },
-    { id: 'map',     src: '/assets/icons/nav-map.svg',     labelKey: 'nav_map' },
+    { id: 'battle',  src: '/assets/icons/nav-battle.svg',  labelKey: 'nav_battle' },
     { id: 'profile', src: '/assets/icons/nav-profile.svg', labelKey: 'nav_profile' },
   ];
   return (
@@ -1219,6 +1221,321 @@ function ResultCard({ dish, highlighted }: { dish: MatchedDish; highlighted?: bo
   );
 }
 
+// ─── Или / Или — выбор между двумя блюдами ────────────────────────────────────
+
+const PICK_ANIM_MS = 300;
+
+function BattleProgress({ round, total, isFinal }: { round: number; total: number; isFinal: boolean }) {
+  const { t } = useLang();
+  return (
+    <div style={{ padding: `0 ${PAD}`, flexShrink: 0 }}>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '8px',
+      }}>
+        <span style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912',
+          fontSize: 'clamp(12px, 3.2vw, 14px)', letterSpacing: '-0.01em',
+        }}>
+          {isFinal ? t('battle_final') : t('battle_question')}
+        </span>
+        <span style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 700,
+          color: isFinal ? '#F48924' : 'rgba(108,41,18,0.5)', fontSize: 'clamp(12px, 3.2vw, 14px)',
+        }}>
+          {round} / {total}
+        </span>
+      </div>
+      <ProgressBar progress={round / total} />
+    </div>
+  );
+}
+
+type PickState = 'idle' | 'won' | 'lost';
+
+function BattleCard({ dish, state, onPick }: { dish: Dish; state: PickState; onPick(): void }) {
+  const { lang } = useLang();
+  const name = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
+  const press = usePressScale(0.97);
+  const scale = state === 'won' ? 1.02 : state === 'lost' ? 0.92 : 1;
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      disabled={state !== 'idle'}
+      aria-label={name}
+      style={{
+        flex: 1, minHeight: 0, width: '100%', padding: 0, cursor: 'pointer',
+        display: 'flex', flexDirection: 'column',
+        borderRadius: '33px', overflow: 'hidden', backgroundColor: '#fff', textAlign: 'left',
+        border: state === 'won' ? '2.5px solid #F48924' : '2.5px solid transparent',
+        boxShadow: state === 'won'
+          ? '0 12px 16px rgba(244,137,36,0.18)'
+          : '0 4px 16px rgba(0,0,0,0.05)',
+        opacity: state === 'lost' ? 0 : 1,
+        transform: `scale(${scale})`,
+        transition: `opacity ${PICK_ANIM_MS}ms cubic-bezier(0.4, 0, 1, 1), transform ${PICK_ANIM_MS}ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s, border-color 0.2s`,
+      }}
+      {...(state === 'idle' ? press : {})}
+    >
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, width: '100%', overflow: 'hidden' }}>
+        <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(64px, 18vw, 96px)" />
+      </div>
+      <div style={{ padding: 'clamp(10px, 2vh, 16px) clamp(14px, 4vw, 20px)', flexShrink: 0, width: '100%' }}>
+        <div style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
+          fontSize: 'clamp(16px, 4.4vw, 22px)', lineHeight: 1.15, letterSpacing: '-0.02em',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {name}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function BattleIntro({ onStart }: { onStart(): void }) {
+  const { t } = useLang();
+  return (
+    <Screen>
+      <div
+        className="flex flex-col items-center justify-center flex-1 text-center"
+        style={{ padding: `clamp(28px,6vh,52px) ${PAD} 16px`, gap: 'clamp(18px, 3.5vh, 28px)' }}
+      >
+        <OmNomLogo size="md" />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(10px, 3vw, 16px)' }}>
+          {['🍛', '🍔'].map((e, i) => (
+            <React.Fragment key={e}>
+              {i === 1 && (
+                <span style={{
+                  fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#F48924',
+                  fontSize: 'clamp(13px, 3.4vw, 16px)', textTransform: 'uppercase', letterSpacing: '0.04em',
+                }}>
+                  {t('battle_or')}
+                </span>
+              )}
+              <div style={{
+                width: 'clamp(96px, 30vw, 128px)', aspectRatio: '1', borderRadius: '33px',
+                backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 'clamp(44px, 13vw, 60px)', lineHeight: 1,
+              }}>
+                {e}
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+
+        <h1 style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
+          fontSize: 'clamp(26px, 7vw, 36px)', letterSpacing: '-0.02em', lineHeight: 1.1,
+        }}>
+          {t('battle_title')}
+        </h1>
+
+        <p style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.7,
+          fontSize: 'clamp(13px, 3.6vw, 16px)', lineHeight: 1.45, whiteSpace: 'pre-line', maxWidth: '300px',
+        }}>
+          {t('battle_subtitle')}
+        </p>
+
+        <div style={{ width: 'min(357px, 85%)' }}>
+          <PressButton onClick={onStart} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
+            {t('battle_start')}
+          </PressButton>
+        </div>
+
+        <p style={{ fontSize: '13px', color: 'rgba(108,41,18,0.55)', fontFamily: 'Inter, sans-serif' }}>
+          {t('battle_hint')}
+        </p>
+      </div>
+    </Screen>
+  );
+}
+
+function BattleResult({ dish, wins, of, onAgain, onHome }: {
+  dish: Dish; wins: number; of: number; onAgain(): void; onHome(): void;
+}) {
+  const { t, lang } = useLang();
+  const name = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
+  const desc = lang === 'uz' ? (dish.description_uz || dish.description) : dish.description;
+  return (
+    <Screen>
+      <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <OmNomLogo size="sm" />
+        </div>
+        <p style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912', opacity: 0.6,
+          fontSize: 'clamp(12px, 3.2vw, 14px)', marginTop: 'clamp(12px, 2.5dvh, 20px)',
+          textTransform: 'uppercase', letterSpacing: '0.04em',
+        }}>
+          {t('battle_result_title')}
+        </p>
+      </div>
+
+      <div style={{
+        margin: `clamp(8px, 2dvh, 18px) ${PAD} 0`, borderRadius: '40px', backgroundColor: '#fff',
+        overflow: 'hidden', flexShrink: 0, boxShadow: '0 14px 8px rgba(0,0,0,0.07)',
+      }}>
+        {/* Шире, чем на экране результата квиза: здесь под карточкой две кнопки, и при
+            квадратной картинке «Сыграть ещё раз» уезжает под нижнюю навигацию. */}
+        <div style={{
+          position: 'relative', width: '100%', aspectRatio: '1.2', backgroundColor: '#FFF1DD',
+          overflow: 'hidden', borderRadius: '40px 40px 0 0',
+        }}>
+          <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(96px, 28vw, 150px)" />
+        </div>
+        <div style={{ padding: 'clamp(12px, 2dvh, 20px) clamp(16px, 4vw, 22px) clamp(14px, 2.2dvh, 22px)', textAlign: 'center' }}>
+          <h1 style={{
+            fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
+            fontSize: 'clamp(20px, 7.4vw, 32px)', lineHeight: '1.15', letterSpacing: '-0.02em',
+          }}>
+            {name}
+          </h1>
+          {wins > 0 && (
+            <div style={{
+              fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#F48924',
+              fontSize: 'clamp(12px, 3.2vw, 15px)', marginTop: 'clamp(6px, 1dvh, 10px)',
+            }}>
+              {wins} {t('battle_wins')} {of}
+            </div>
+          )}
+          <p style={{
+            fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7,
+            fontSize: 'clamp(13px, 3.5vw, 16px)', marginTop: 'clamp(8px, 1.5dvh, 14px)', lineHeight: '21px',
+          }}>
+            {desc}
+          </p>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: `clamp(14px, 2.8dvh, 26px) ${PAD} clamp(8px, 1.5dvh, 14px)`, flexShrink: 0 }}>
+        <PressButton onClick={onAgain} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
+          {t('battle_again')}
+        </PressButton>
+        <button
+          type="button"
+          onClick={onHome}
+          style={{
+            width: '100%', height: '48px', borderRadius: '100px', background: 'none',
+            border: '2px solid rgba(108,41,18,0.2)', cursor: 'pointer',
+            fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912',
+            fontSize: 'clamp(13px, 3.5vw, 15px)',
+          }}
+        >
+          {t('battle_home')}
+        </button>
+      </div>
+    </Screen>
+  );
+}
+
+export function FoodBattleScreen({ dishes, allergens, onWinner, onGoHome }: {
+  dishes: readonly Dish[];
+  allergens: readonly string[];
+  onWinner(dish: Dish): void;
+  onGoHome(): void;
+}) {
+  const { t } = useLang();
+  const [session, setSession] = useState<BattleSession | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const busy = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reported = useRef<string | null>(null);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const start = () => {
+    busy.current = false;
+    setPicked(null);
+    setSession(createBattleSession(dishes, allergens));
+  };
+
+  // Победитель уходит в историю один раз за игру.
+  useEffect(() => {
+    const winner = session?.winner;
+    if (winner && reported.current !== winner.id) {
+      reported.current = winner.id;
+      onWinner(winner);
+    }
+    if (!winner) reported.current = null;
+  }, [session?.winner, onWinner]);
+
+  const pick = (id: string) => {
+    // Быстрые повторные тапы не должны проматывать два раунда за один выбор.
+    if (!session || busy.current || picked) return;
+    busy.current = true;
+    setPicked(id);
+    timer.current = setTimeout(() => {
+      setSession((prev) => (prev ? registerChoice(prev, id) : prev));
+      setPicked(null);
+      busy.current = false;
+    }, PICK_ANIM_MS);
+  };
+
+  if (!session) return <BattleIntro onStart={start} />;
+
+  if (!canPlay(session)) {
+    return (
+      <Screen>
+        <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+          <OmNomLogo size="md" />
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: PAD, textAlign: 'center' }}>
+          <span style={{ fontSize: '64px' }}>🙈</span>
+          <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#6C2912', fontSize: 'clamp(18px, 5vw, 24px)', lineHeight: 1.25, letterSpacing: '-0.02em', margin: 0 }}>
+            {t('battle_empty_title')}
+          </p>
+          <p style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.6, fontSize: 'clamp(13px, 3.5vw, 15px)', lineHeight: 1.5, margin: 0, maxWidth: '300px' }}>
+            {t('battle_empty_sub')}
+          </p>
+        </div>
+      </Screen>
+    );
+  }
+
+  if (session.winner) {
+    const rec = winnerRecord(session);
+    return <BattleResult dish={session.winner} wins={rec.wins} of={rec.of} onAgain={start} onHome={onGoHome} />;
+  }
+
+  const pair = session.pair;
+  if (!pair) return <BattleIntro onStart={start} />;
+
+  return (
+    <Screen>
+      <div style={{ padding: `clamp(16px, 3dvh, 26px) 0 clamp(12px, 2dvh, 18px)`, flexShrink: 0 }}>
+        <BattleProgress round={session.round} total={session.maxRounds + 1} isFinal={session.isFinal} />
+      </div>
+
+      <div style={{
+        flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+        gap: 'clamp(6px, 1.4vh, 12px)', padding: `0 ${PAD} clamp(12px, 2.4dvh, 22px)`,
+      }}>
+        <BattleCard
+          dish={pair[0]}
+          state={picked ? (picked === pair[0].id ? 'won' : 'lost') : 'idle'}
+          onPick={() => pick(pair[0].id)}
+        />
+        <div style={{
+          flexShrink: 0, textAlign: 'center', fontFamily: 'Inter, sans-serif', fontWeight: 900,
+          color: '#F48924', fontSize: 'clamp(12px, 3.2vw, 15px)',
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+        }}>
+          {t('battle_or')}
+        </div>
+        <BattleCard
+          dish={pair[1]}
+          state={picked ? (picked === pair[1].id ? 'won' : 'lost') : 'idle'}
+          onPick={() => pick(pair[1].id)}
+        />
+      </div>
+    </Screen>
+  );
+}
+
 // ─── Tab screens ──────────────────────────────────────────────────────────────
 
 const HISTORY_MODE_KEYS: Record<HistoryMode, TranslationKey> = {
@@ -1226,6 +1543,7 @@ const HISTORY_MODE_KEYS: Record<HistoryMode, TranslationKey> = {
   snack: 'history_mode_snack',
   dessert: 'history_mode_dessert',
   random: 'history_mode_random',
+  battle: 'history_mode_battle',
 };
 
 export function HistoryScreen({ history, dishById }: { history: HistoryItem[]; dishById: ReadonlyMap<string, Dish> }) {
