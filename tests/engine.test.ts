@@ -436,8 +436,38 @@ test('rankResults: one dish per cuisine for meal/any and snack, second of a cuis
   assert.equal(shown(snack).filter((d) => d.cuisine === 'asian').length, 2);
   const single = applyAnswer(startSession(pool, 'meal', 'asian', []), q, 'yes');
   assert.deepEqual(shown(single).map((d) => d.cuisine), ['asian', 'asian', 'asian']);
+  // Nothing but asian passed: holding the cap would mean throwing away valid matches to
+  // honour a spread that is unreachable anyway, so the slots get filled.
   const five = Array.from({ length: 5 }, () => mk('asian', 'yes'));
-  assert.equal(shown(applyAnswer(startSession(five, 'meal', ANY_CUISINE, []), q, 'yes')).length, 2, 'at most two per cuisine');
+  assert.equal(shown(applyAnswer(startSession(five, 'meal', ANY_CUISINE, []), q, 'yes')).length, 3, 'single-cuisine pool still fills the slots');
+});
+
+test('rankResults: the cuisine cap applies from the start, not only when slots are left over', () => {
+  const q = question({ tag: 'w' });
+  // Six cuisines, five slots: a strict one-per-cuisine rule would fill every slot with a
+  // different cuisine and never show the second asian dish, however well it scored.
+  const pool = [
+    dish({ id: 'a1', cuisine: 'asian', w: 'yes' }),
+    dish({ id: 'a2', cuisine: 'asian', w: 'yes' }),
+    ...['slavic', 'european', 'middle-east', 'fast-food', 'central-asia'].map((c, i) =>
+      dish({ id: `c${i}`, cuisine: c, w: 'yes' })),
+  ];
+  const r = rankResults(applyAnswer(startSession(pool, 'meal', ANY_CUISINE, []), q, 'yes'), 5);
+  assert.equal(r.dishes.length, 5);
+  assert.equal(r.dishes.filter((d) => d.cuisine === 'asian').length, 2, 'both asian dishes shown');
+  assert.equal(new Set(r.dishes.map((d) => d.cuisine)).size, 4, 'and still four cuisines');
+});
+
+test('allCuisinesResults keeps a strict one dish per cuisine even when slots stay empty', () => {
+  const q = question({ tag: 'w' });
+  const pool = [
+    dish({ id: 'a1', cuisine: 'asian', w: 'yes' }),
+    dish({ id: 'a2', cuisine: 'asian', w: 'yes' }),
+    dish({ id: 's1', cuisine: 'slavic', w: 'yes' }),
+  ];
+  const s = applyAnswer(startSession(pool, 'meal', ANY_CUISINE, []), q, 'yes');
+  const r = allCuisinesResults(pool, s.log, [], 5);
+  assert.deepEqual(r.dishes.map((d) => d.cuisine).sort(), ['asian', 'slavic'], 'never relaxed to fill 5');
 });
 
 test('allCuisinesResults: all cuisines, one per cuisine, 50% threshold, allergens, neutral foreign questions', () => {

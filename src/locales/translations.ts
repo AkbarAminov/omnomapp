@@ -39,7 +39,7 @@ const ru = {
 
   // ── Loading screen ───────────────────────────────────────────────────────────
   loading_title:    'Подбираем\nдля тебя',
-  loading_subtitle: 'ИИ анализирует твои вкусы',
+  loading_subtitle: 'Сверяем ответы с блюдами',
 
   // ── Single result ────────────────────────────────────────────────────────────
   result_match_label: 'Подходит на',
@@ -175,7 +175,7 @@ const uz: Record<keyof typeof ru, string> = {
 
   // ── Loading screen ───────────────────────────────────────────────────────────
   loading_title:    'Siz uchun\ntanlamoqdamiz',
-  loading_subtitle: "AI did'ingizni tahlil qilmoqda",
+  loading_subtitle: "Javoblaringizni taomlarga solishtiryapmiz",
 
   // ── Single result ────────────────────────────────────────────────────────────
   result_match_label: 'Moslik',

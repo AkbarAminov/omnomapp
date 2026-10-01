@@ -39,9 +39,15 @@ try {
     await page.getByText(t.cuisine, { exact: true }).click();
     const done = page.getByText(t.done).first();
     for (let i = 0; i < 12 && !(await done.isVisible().catch(() => false)); i++) {
-      const yes = page.getByRole('button', { name: t.yes, exact: true });
-      if (await yes.isVisible().catch(() => false)) await yes.click();
-      await page.waitForTimeout(450);
+      const yes = page.getByRole('button', { name: t.yes, exact: true }).first();
+      if (await yes.isVisible().catch(() => false)) {
+        // Карточка уезжает сразу после нажатия, и кнопка отцепляется от DOM раньше, чем click()
+        // успевает дождаться её «стабильности». Поэтому события отправляются напрямую.
+        await yes.dispatchEvent('pointerdown').catch(() => {});
+        await yes.dispatchEvent('pointerup').catch(() => {});
+        await yes.dispatchEvent('click').catch(() => {});
+      }
+      await page.waitForTimeout(700);
     }
     await done.waitFor({ timeout: 15000 });
     await page.waitForTimeout(700);

@@ -46,7 +46,12 @@ import { LangProvider } from './locales/LangContext';
 export type FlowScreen = 'start' | 'mode' | 'cuisine' | 'question' | 'loading' | 'single-result' | 'results' | 'no-results';
 export type TabScreen = 'home' | 'history' | 'battle' | 'profile';
 
-type QuizView = { session: Session; question: Question; isLast: boolean; remaining: number; progress: number };
+type QuizView = { session: Session; question: Question; isLast: boolean; nearEnd: boolean; progress: number };
+
+// «Уже близко» не показывается раньше четвёртого вопроса и только когда движку осталось не
+// больше двух: на первых вопросах оценка слишком прыгает, чтобы на неё что-то обещать.
+const NEAR_END_MIN_SWIPES = 3;
+const NEAR_END_REMAINING = 2;
 
 function getAllergens(): Promise<string[]> {
   return loadSettings().then((s) => s.allergens).catch(() => []);
@@ -89,6 +94,7 @@ function OmNomApp() {
   const quizStartedAtRef = useRef(0);
   const pendingAnswersRef = useRef<{ id: string; session: Session; guessedDishId: string } | null>(null);
   const rejectedIdsRef = useRef<string[]>([]);
+  const nearEndRef = useRef(false);
   const loadingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTimer = () => {
@@ -164,22 +170,25 @@ function OmNomApp() {
     flushEvents();
   };
 
+  // Результат готов ещё до этого экрана — пауза нужна только чтобы выдача не выпрыгивала из-под
+  // пальца. Раньше она занимала почти пять секунд, то есть дольше, чем весь тест из шести
+  // вопросов; теперь укладывается примерно в полторы.
   const runLoading = () => {
     setLoadingProgress(0);
     setFlowScreen('loading');
-    const steps = [12, 30, 48, 65, 80, 93, 100];
+    const steps = [24, 58, 86, 100];
     let i = 0;
     const tick = () => {
       if (i < steps.length) {
         setLoadingProgress(steps[i]);
         i++;
-        const delay = i === steps.length ? 900 : 280 + Math.random() * 380;
+        const delay = i === steps.length ? 320 : 170 + Math.random() * 180;
         loadingTimer.current = setTimeout(tick, delay);
       } else {
-        loadingTimer.current = setTimeout(() => setFlowScreen('single-result'), 500);
+        loadingTimer.current = setTimeout(() => setFlowScreen('single-result'), 220);
       }
     };
-    loadingTimer.current = setTimeout(tick, 200);
+    loadingTimer.current = setTimeout(tick, 120);
   };
 
   const finalizeQuiz = (session: Session) => {
@@ -263,8 +272,13 @@ function OmNomApp() {
       question_index: session.swipes + 1,
       props: { tag: question.tag, candidates: session.candidates.length },
     });
+    // remainingEstimate не монотонный: на первом вопросе он бывает 2, а на следующем 5, потому
+    // что ответ открывает вопросы, которые раньше не проходили окно информативности. Поэтому
+    // подсказка только защёлкивается и не может появиться в самом начале: обещание скорого
+    // финала нельзя забирать обратно — ровно этим врал прежний счётчик шагов.
+    nearEndRef.current = nearEndRef.current || (session.swipes >= NEAR_END_MIN_SWIPES && remainingEstimate <= NEAR_END_REMAINING);
     setQuizView({
-      session, question, isLast: isLastQuestion, remaining: remainingEstimate,
+      session, question, isLast: isLastQuestion, nearEnd: nearEndRef.current,
       progress: nextProgress(prevProgress, data!.questions, session),
     });
     setFlowScreen('question');
@@ -276,6 +290,7 @@ function OmNomApp() {
     if (!data) return;
     allergensRef.current = await getAllergens();
     const session = startSession(data.dishes, mode, cuisine, allergensRef.current);
+    nearEndRef.current = false;
     quizIdRef.current = newSessionId();
     quizStartedAtRef.current = Date.now();
     track('test_started', {
@@ -444,7 +459,7 @@ function OmNomApp() {
       <QuestionCardScreen
         question={quiz.question}
         isLast={quiz.isLast}
-        nearEnd={quiz.remaining <= 2}
+        nearEnd={quiz.nearEnd}
         nextByAnswer={nextByAnswer}
         onAnswer={handleAnswer}
       />

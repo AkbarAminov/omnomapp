@@ -2292,6 +2292,8 @@ const HISTORY_MODE_KEYS: Record<HistoryMode, TranslationKey> = {
   battle: 'history_mode_battle',
 };
 
+const HISTORY_CLEAR_MIN = 3;
+
 export function HistoryScreen({ history, dishById, onClearHistory }: {
   history: HistoryItem[]; dishById: ReadonlyMap<string, Dish>; onClearHistory(): Promise<void>;
 }) {
@@ -2394,7 +2396,9 @@ export function HistoryScreen({ history, dishById, onClearHistory }: {
           })}
 
         {/* Управление историей живёт рядом с самой историей, а не в настройках профиля,
-            и по массе совпадает с карточкой результата. */}
+            и по массе совпадает с карточкой результата. На одной-двух записях красная кнопка
+            весит столько же, сколько вся история, поэтому появляется с третьей. */}
+        {history.length >= HISTORY_CLEAR_MIN && (
         <button
           type="button"
           onClick={() => setConfirming(true)}
@@ -2420,6 +2424,7 @@ export function HistoryScreen({ history, dishById, onClearHistory }: {
             {t('profile_clear_history')}
           </span>
         </button>
+        )}
         </div>
         </div>
       )}

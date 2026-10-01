@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Dish, normalizeDish, normalizeQuestion, Question } from './engine';
-import { MenuItem, normalizeMenuItem, normalizePlace, Place } from './places';
+import { MenuItem, Place } from './places';
 
 export type AppData = {
   dishes: Dish[];
@@ -18,31 +18,19 @@ export function getData(): AppData {
   return cache;
 }
 
-// Places are optional: if those tables are missing or fail, the quiz still works.
-async function loadPlaces(): Promise<{ places: Place[]; menuItems: MenuItem[] }> {
-  const [placesRes, itemsRes] = await Promise.all([
-    supabase.from('places').select('*').eq('is_active', true),
-    supabase.from('menu_items').select('*'),
-  ]);
-  if (placesRes.error || itemsRes.error) {
-    console.warn('[OmNom] places unavailable:', placesRes.error ?? itemsRes.error);
-    return { places: [], menuItems: [] };
-  }
-  return {
-    places: (placesRes.data ?? []).map(normalizePlace).filter((p) => p.is_active),
-    menuItems: (itemsRes.data ?? []).map(normalizeMenuItem),
-  };
-}
-
 export function loadData(): Promise<AppData> {
   if (cache) return Promise.resolve(cache);
   if (!pending) {
     pending = (async () => {
-      const [dishesRes, questionsRes, placeData] = await Promise.all([
+      // places / menu_items больше не запрашиваются: их единственный потребитель — MapScreen,
+      // а вкладка «Локация» убрана, то есть это были два round-trip на холодном старте ради
+      // экрана, которого нет. Сам MapScreen, normalizePlace и таблицы на месте — когда вкладка
+      // вернётся, запрос пишется обратно сюда четырьмя строками.
+      const [dishesRes, questionsRes] = await Promise.all([
         supabase.from('dishes').select('*'),
         supabase.from('questions').select('*').order('priority'),
-        loadPlaces().catch(() => ({ places: [], menuItems: [] })),
       ]);
+      const placeData = { places: [], menuItems: [] };
       if (dishesRes.error) throw dishesRes.error;
       if (questionsRes.error) throw questionsRes.error;
       const dishes = (dishesRes.data ?? []).map(normalizeDish);

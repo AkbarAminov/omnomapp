@@ -113,8 +113,11 @@ export const RESULT_COUNT = 5;
 
 // Results below this honest match percent are not shown.
 export const RESULT_MIN_PERCENT = 50;
-// When cuisine diversity leaves fewer than 3 results, a cuisine may appear this many times.
-export const RESULT_MAX_PER_CUISINE_FALLBACK = 2;
+// At most this many dishes of one cuisine in the results. Strict one-per-cuisine meant a dish
+// had to be the best of its entire cuisine to be shown at all, which left 43 of 99 snacks and
+// 62 of 228 mains unreachable (npm run validate). Two keeps the spread — the simulator still
+// returns 3.3 cuisines per result set — and returns ~18 points of snack accuracy.
+export const RESULT_MAX_PER_CUISINE = 2;
 
 const PROGRESS_CAP = 0.95;
 
@@ -504,7 +507,10 @@ function rank(candidates: readonly Dish[], weights: readonly number[], log: read
       || a.dish.id.localeCompare(b.dish.id));
 }
 
-function pickDiverse(pool: Ranked[], n: number, fallbackPerCuisine: number): Ranked[] {
+// A cap above 1 is a preference: if it cannot fill n slots, cuisine stops mattering for the
+// rest — five options are worth more than the spread. A cap of 1 («Все кухни») is a promise
+// the screen makes and is never relaxed.
+function pickDiverse(pool: Ranked[], n: number, maxPerCuisine: number): Ranked[] {
   const picked: Ranked[] = [];
   const perCuisine = new Map<string, number>();
   const take = (max: number) => {
@@ -515,27 +521,27 @@ function pickDiverse(pool: Ranked[], n: number, fallbackPerCuisine: number): Ran
       perCuisine.set(x.dish.cuisine, (perCuisine.get(x.dish.cuisine) ?? 0) + 1);
     }
   };
-  take(1);
-  if (picked.length < n && fallbackPerCuisine > 1) take(fallbackPerCuisine);
+  take(maxPerCuisine);
+  if (picked.length < n && maxPerCuisine > 1) take(Infinity);
   return picked.sort((a, b) => pool.indexOf(a) - pool.indexOf(b));
 }
 
-function toResultSet(ranked: Ranked[], diverse: boolean, fallbackPerCuisine: number, n: number): ResultSet {
+function toResultSet(ranked: Ranked[], diverse: boolean, maxPerCuisine: number, n: number): ResultSet {
   if (ranked.length === 0) return { dishes: [], exact: true };
   const toMatched = (x: Ranked): MatchedDish => ({ ...x.dish, matchPercent: x.pct });
   if (ranked[0].pct === null) {
-    const top = diverse ? pickDiverse(ranked, n, fallbackPerCuisine) : ranked.slice(0, n);
+    const top = diverse ? pickDiverse(ranked, n, maxPerCuisine) : ranked.slice(0, n);
     return { dishes: top.map(toMatched), exact: true };
   }
   const passed = ranked.filter((x) => x.pct !== null && x.pct >= RESULT_MIN_PERCENT);
   if (passed.length === 0) return { dishes: [toMatched(ranked[0])], exact: false };
-  const top = diverse ? pickDiverse(passed, n, fallbackPerCuisine) : passed.slice(0, n);
+  const top = diverse ? pickDiverse(passed, n, maxPerCuisine) : passed.slice(0, n);
   return { dishes: top.map(toMatched), exact: true };
 }
 
 export function rankResults(session: Session, n: number = TOP_N): ResultSet {
   const ranked = rank(session.candidates, session.weights, session.log, session.mode);
-  return toResultSet(ranked, usesCuisineDiversity(session), RESULT_MAX_PER_CUISINE_FALLBACK, n);
+  return toResultSet(ranked, usesCuisineDiversity(session), RESULT_MAX_PER_CUISINE, n);
 }
 
 // «Все кухни»: the same answers replayed over every cuisine's mains, one dish per cuisine.
