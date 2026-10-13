@@ -1091,43 +1091,56 @@ export function LoadingScreen({ progress }: { progress: number }) {
   const { t } = useLang();
   const pct = Math.min(Math.max(Math.round(progress), 0), 100);
   return (
-    <div style={{
-      minHeight: '100%', height: '100%', backgroundColor: '#F48924',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: 'clamp(22px, 4dvh, 34px)',
-    }}>
-      <img
-        src="/assets/logo_horizontal.svg"
-        alt="omnom"
-        style={{
-          width: 'clamp(220px, 62vw, 320px)', height: 'auto', display: 'block',
-          animation: 'logoBreathe 2.2s ease-in-out infinite',
-        }}
-      />
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-        <div style={{ display: 'flex', gap: '7px' }}>
-          {[0, 1, 2].map((i) => (
-            <span key={i} style={{
-              width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#fff',
-              animation: `loadingDot 1.1s ease-in-out ${i * 0.15}s infinite`,
-            }} />
-          ))}
+    <Screen>
+      <div style={{ padding: `${LOGO_TOP} ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: LOGO_GAP }}>
+          <OmNomLogo />
         </div>
-        <p style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#fff',
-          fontSize: 'clamp(16px, 4.4vw, 20px)', margin: 0, textAlign: 'center', whiteSpace: 'pre-line',
+        <h2 style={{ ...SCREEN_TITLE, whiteSpace: 'pre-line' }}>{t('loading_title')}</h2>
+      </div>
+
+      <div style={{
+        flex: 1, minHeight: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: `clamp(4px, 1dvh, 12px) 0`,
+        overflow: 'hidden',
+      }}>
+        <img
+          src="/assets/char-loading.png"
+          alt=""
+          // Персонаж — главный элемент состояния: берёт всю доступную ширину и высоту,
+          // пропорции не трогаем.
+          style={{ width: '100%', height: '100%', maxWidth: '520px', objectFit: 'contain' }}
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+            const span = document.createElement('span');
+            span.textContent = '🍽️'; span.style.fontSize = '80px';
+            (e.target as HTMLImageElement).parentElement!.appendChild(span);
+          }}
+        />
+      </div>
+
+      <div style={{ padding: `0 ${PAD}`, marginBottom: 'clamp(16px, 2.6dvh, 26px)', flexShrink: 0 }}>
+        <div style={{
+          position: 'relative', borderRadius: '999px', overflow: 'hidden',
+          height: 'clamp(54px, 12vw, 66px)', backgroundColor: '#E5CDA5',
         }}>
-          {t('loading_title')}
-        </p>
-        <p style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#FFEEDB', opacity: 0.85,
-          fontSize: 'clamp(12px, 3.3vw, 14px)', margin: 0, textAlign: 'center',
-          fontVariantNumeric: 'tabular-nums',
-        }}>
-          {t('loading_subtitle')} · <AnimatedPercent value={pct} />%
+          <div style={{
+            position: 'absolute', left: 0, top: 0, height: '100%', borderRadius: '999px',
+            display: 'flex', alignItems: 'center', paddingLeft: '20px',
+            width: `${pct}%`, minWidth: pct > 0 ? '74px' : '0',
+            backgroundColor: '#F48924', transition: 'width 0.7s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}>
+            <span style={{ fontFamily: 'Inter, sans-serif', color: '#fff', fontWeight: 900, fontSize: 'clamp(16px, 4vw, 22px)', fontVariantNumeric: 'tabular-nums' }}>
+              <AnimatedPercent value={pct} />
+            </span>
+          </div>
+        </div>
+        <p style={{ textAlign: 'center', color: '#6F3B16', marginTop: '10px', opacity: 0.7, fontFamily: 'Inter, sans-serif', fontSize: 'clamp(12px, 3vw, 14px)' }}>
+          {t('loading_subtitle')}
         </p>
       </div>
-    </div>
+    </Screen>
   );
 }
 
