@@ -538,7 +538,7 @@ function OmNomApp() {
 
   return (
     <div className="omnom-shell" style={{
-      width: '100%', maxWidth: '440px', margin: '0 auto',
+      width: '100%', maxWidth: '768px', margin: '0 auto',
       position: 'relative', display: 'flex', flexDirection: 'column',
       height: 'var(--tg-vh, 100dvh)', minHeight: 'var(--tg-vh, 100dvh)',
       overflow: 'hidden', backgroundColor: '#FFF1DC',

@@ -1689,7 +1689,7 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
     <div
       style={{
         position: 'fixed', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
-        width: '100%', maxWidth: '440px', height: 'var(--tg-vh, 100dvh)', zIndex: 110,
+        width: '100%', maxWidth: '768px', height: 'var(--tg-vh, 100dvh)', zIndex: 110,
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
         backgroundColor: 'rgba(66, 24, 8, 0.55)',
         animation: `battleOverlayIn 220ms ${EASE_OUT} both`,
@@ -2118,7 +2118,7 @@ export function AppOnboarding({ onDone }: { onDone(): void }) {
   return createPortal(
     <div style={{
       position: 'fixed', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
-      width: '100%', maxWidth: '440px', height: 'var(--tg-vh, 100dvh)', zIndex: 120,
+      width: '100%', maxWidth: '768px', height: 'var(--tg-vh, 100dvh)', zIndex: 120,
       backgroundColor: '#F48924',
       opacity: leaving ? 0 : 1,
       transition: `opacity 260ms ${EASE_IN}`,
@@ -2732,7 +2732,7 @@ function ConfirmSheet({ title, subtitle, confirmLabel, cancelLabel, onConfirm, o
       onClick={onCancel}
       style={{
         position: 'fixed', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
-        width: '100%', maxWidth: '440px', height: 'var(--tg-vh, 100dvh)', zIndex: 110,
+        width: '100%', maxWidth: '768px', height: 'var(--tg-vh, 100dvh)', zIndex: 110,
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
         backgroundColor: 'rgba(66, 24, 8, 0.55)',
         animation: `battleOverlayIn 220ms ${EASE_OUT} both`,
