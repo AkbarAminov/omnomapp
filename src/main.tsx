@@ -17,6 +17,7 @@ declare global {
         themeParams: Record<string, string>;
         isVersionAtLeast?(version: string): boolean;
         requestFullscreen?(): void;
+        disableVerticalSwipes?(): void;
         safeAreaInset?: { top: number; bottom: number; left: number; right: number };
         contentSafeAreaInset?: { top: number; bottom: number; left: number; right: number };
         onEvent?(eventType: string, callback: () => void): void;
@@ -62,6 +63,12 @@ function Root() {
       // их изменении — переносим в CSS-переменную, которую читают верхние отступы экранов.
       if (tg.isVersionAtLeast?.('8.0')) {
         tg.requestFullscreen?.();
+        // Без нативной шапки вертикальные свайпы на контенте больше никто не перехватывает —
+        // Telegram сам начинает читать их как жест закрытия/сворачивания, из-за чего WebView
+        // отвечает резиновым скроллом (на миг показывает пустоту снизу) на свайпе вверх по
+        // карточке вопроса, хотя этот экран не должен скроллиться вообще. У своего же свайпа
+        // есть выделенный ответ «Без разницы» — Telegram не должен его трогать.
+        tg.disableVerticalSwipes?.();
         const syncSafeArea = () => {
           const top = (tg.safeAreaInset?.top ?? 0) + (tg.contentSafeAreaInset?.top ?? 0);
           document.documentElement.style.setProperty('--tg-safe-top', `${top}px`);

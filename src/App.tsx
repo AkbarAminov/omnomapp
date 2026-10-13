@@ -545,6 +545,7 @@ function OmNomApp() {
           flex: 1,
           overflowY: 'auto',
           overflowX: 'hidden',
+          overscrollBehaviorY: 'contain',
           backgroundColor: '#FFF1DC',
           paddingBottom: showNav && !underNav ? NAV_SPACE : 0,
           animation: 'screenFadeIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
