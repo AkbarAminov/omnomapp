@@ -136,7 +136,9 @@ function OmNomApp() {
     };
     setHistory((prev) => [item, ...prev].slice(0, 50));
     saveHistoryItem(dish, mode, matchPercent);
-    trackEvent('dish_selected', { dish_id: dish.id, rank });
+    // mode различает формат, которым дошли до блюда: 'meal'/'snack'/'dessert' — обычный тест,
+    // 'random' — рандомайзер, 'battle' — Или/Или.
+    trackEvent('dish_selected', { dish_id: dish.id, rank, mode });
   };
 
   const setQuizView = (view: QuizView | null) => {
