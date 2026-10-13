@@ -66,9 +66,15 @@ function Root() {
           const top = (tg.safeAreaInset?.top ?? 0) + (tg.contentSafeAreaInset?.top ?? 0);
           document.documentElement.style.setProperty('--tg-safe-top', `${top}px`);
         };
+        // requestFullscreen() — переход анимированный и асинхронный; сразу после вызова
+        // safeAreaInset/contentSafeAreaInset ещё могут быть нулями. Опрашиваем несколько раз
+        // первую секунду, а не только по событиям — contentSafeAreaInset (место под плавающие
+        // «Закрыть/⌄/⋯» Telegram) на практике не всегда шлёт contentSafeAreaChanged вовремя.
         syncSafeArea();
+        [150, 350, 700, 1200].forEach((ms) => setTimeout(syncSafeArea, ms));
         tg.onEvent?.('safeAreaChanged', syncSafeArea);
         tg.onEvent?.('contentSafeAreaChanged', syncSafeArea);
+        tg.onEvent?.('fullscreenChanged', syncSafeArea);
       }
     }
     // Fire-and-forget: must not delay first render or ever surface to the UI. The session
