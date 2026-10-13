@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { track } from '../logic/analytics';
 
 // Session refresh_token only — convenience cache so a flaky network on app_open doesn't
 // force a profile-less run. Never cached to localStorage: outside Telegram there is no
@@ -31,23 +32,48 @@ function getInitData(): string | null {
   return (window as any).Telegram?.WebApp?.initData || null;
 }
 
+// users/app_sessions/user_events не пишут ни строки, если initAuth ни разу не проходит —
+// и сам trackEvent() при этом молчит (нет профиля → no-op), так что без этой диагностики
+// причина никогда не всплывёт. events (эта функция) не требует auth.uid(), пишет всегда.
+async function authFailureReason(error: unknown): Promise<{ reason: string; status: number | null }> {
+  const ctx = (error as { context?: Response })?.context;
+  if (ctx) {
+    const body = await ctx.clone().json().catch(() => null);
+    return { reason: body?.error ?? (error as Error)?.message ?? 'http_error', status: ctx.status ?? null };
+  }
+  if (error) return { reason: (error as Error)?.message ?? 'unknown_error', status: null };
+  return { reason: 'no_tokens_in_response', status: null };
+}
+
 async function authWithEdgeFunction(initData: string): Promise<boolean> {
   const { data, error } = await supabase.functions.invoke('auth-telegram', { body: { initData } });
-  if (error || !data?.access_token || !data?.refresh_token) return false;
+  if (error || !data?.access_token || !data?.refresh_token) {
+    const { reason, status } = await authFailureReason(error);
+    track('auth_failed', { props: { step: 'edge_function', reason, status } });
+    return false;
+  }
   const { error: sessionErr } = await supabase.auth.setSession({
     access_token: data.access_token,
     refresh_token: data.refresh_token,
   });
-  if (sessionErr) return false;
+  if (sessionErr) {
+    track('auth_failed', { props: { step: 'set_session', reason: sessionErr.message } });
+    return false;
+  }
   cacheRefreshToken(data.refresh_token);
   return true;
 }
 
 async function authWithCachedToken(): Promise<boolean> {
   const cached = await getCachedRefreshToken();
+  // Не трекаем: это ожидаемый путь при каждом провале authWithEdgeFunction, пока не
+  // пройдёт хоть одна успешная авторизация — кэша ещё просто неоткуда взяться.
   if (!cached) return false;
   const { data, error } = await supabase.auth.refreshSession({ refresh_token: cached });
-  if (error || !data.session) return false;
+  if (error || !data.session) {
+    track('auth_failed', { props: { step: 'refresh_session', reason: error?.message ?? 'no_session' } });
+    return false;
+  }
   cacheRefreshToken(data.session.refresh_token);
   return true;
 }

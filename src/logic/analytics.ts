@@ -17,7 +17,10 @@ export type EventName =
   | 'battle_opened'
   // Каждый выбор в «Или / Или» — живой сигнал о вкусах, а не только итоговый победитель.
   | 'battle_choice'
-  | 'battle_winner';
+  | 'battle_winner'
+  // Диагностика auth-telegram: пайплайн users/app_sessions/user_events молчит, если
+  // авторизация ни разу не прошла, и trackEvent() не даёт понять почему — только здесь видно.
+  | 'auth_failed';
 
 export type EventFields = {
   session_id?: string | null;
