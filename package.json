@@ -11,6 +11,7 @@
     "validate": "node scripts/validate.ts",
     "gen:sql": "node scripts/genSql.ts",
     "gen:images": "node scripts/genImageManifest.ts",
+    "gen:photos": "node scripts/genDishPhotos.ts",
     "calibrate": "node scripts/calibrate.ts"
   },
   "dependencies": {

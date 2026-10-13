@@ -1,0 +1,329 @@
+# Фотографии блюд для генерации. id, названия, английское описание для промпта, целевой файл, есть ли уже картинка.
+# has_image=yes — фото уже есть (Supabase storage или локальный файл); скрипт их пропускает.
+# Правится руками: name_en и description_en идут в промпт. Запуск: node scripts/genDishPhotos.ts
+id,name_ru,name_en,description_en,target_path,has_image
+ramen-02,Рамен,Ramen,"Noodles in a rich meat broth with meat, egg, and menma bamboo shoots.",public/images/dishes/ramen-02.webp,yes
+duck-tantanmen-26,Тантанмен,Duck Tantanmen,"Spicy ramen in duck broth with duck, egg, mushrooms, and cashews.",public/images/dishes/duck-tantanmen-26.webp,yes
+vegetable-ramen-24,Овощной рамен,Vegetable Ramen,"Ramen in vegetable broth with cabbage, carrot, mushrooms, and bean sprouts.",public/images/dishes/vegetable-ramen-24.webp,yes
+hiyashi-tomato-ramen-20,Холодный рамен с томатами,Cold Tomato Ramen,Cold broth-free noodles with fresh vegetables and sesame dressing.,public/images/dishes/hiyashi-tomato-ramen-20.webp,yes
+gyu-mazesoba-21,Мазесоба с говядиной,Beef Mazesoba,"Broth-free noodles with beef, egg yolk, vegetables, and soy sauce.",public/images/dishes/gyu-mazesoba-21.webp,yes
+yakisoba-15,Якисоба,Yakisoba,"Stir-fried wheat noodles with beef, vegetables, and omelet strips.",public/images/dishes/yakisoba-15.webp,yes
+salmon-donburi-40,Донбури с лососем,Salmon Donburi,A bowl of rice topped with pieces of salmon and sauce.,public/images/dishes/salmon-donburi-40.webp,yes
+toridon-76,Торидон,Toridon,A bowl of rice with a crispy breaded chicken cutlet and cabbage.,public/images/dishes/toridon-76.webp,yes
+fried-rice-14,Жареный рис с курицей,Chicken Fried Rice,"Rice stir-fried with chicken, egg, and vegetables.",public/images/dishes/fried-rice-14.webp,yes
+kimchi-beef-rice-74,Жареный рис с кимчи и говядиной,Kimchi Beef Fried Rice,"Spicy fried rice with kimchi, beef bacon, and egg.",public/images/dishes/kimchi-beef-rice-74.webp,yes
+seafood-fried-rice-75,Жареный рис с морепродуктами,Seafood Fried Rice,"Rice stir-fried with seafood, egg, and vegetables.",public/images/dishes/seafood-fried-rice-75.webp,yes
+vegetable-fried-rice-78,Жареный рис с овощами,Vegetable Fried Rice,Rice stir-fried with vegetables and egg.,public/images/dishes/vegetable-fried-rice-78.webp,yes
+duck-teppanyaki-rice-72,Утка теппанъяки с рисом,Duck Teppanyaki with Rice,"Duck seared on a teppan griddle, served with rice.",public/images/dishes/duck-teppanyaki-rice-72.webp,yes
+teriyaki-chicken-71,Курица терияки,Teriyaki Chicken,Chicken thigh in sweet-savory teriyaki sauce.,public/images/dishes/teriyaki-chicken-71.webp,yes
+gyuniku-nikomi-70,Гюнику никоми,Gyuniku Nikomi,Beef simmered Japanese-style in a sweet-savory sauce.,public/images/dishes/gyuniku-nikomi-70.webp,yes
+tuna-baked-avocado-69,Тунец с печёным авокадо,Seared Tuna with Baked Avocado,Seared tuna served with baked avocado.,public/images/dishes/tuna-baked-avocado-69.webp,yes
+sushi-01,Суши,Sushi,Nigiri — rice topped with slices of fish or seafood.,public/images/dishes/sushi-01.webp,yes
+maki-47,Маки,Maki,Small rolls of rice and nori with fish or vegetables.,public/images/dishes/maki-47.webp,yes
+philadelphia-roll-52,Ролл Филадельфия,Philadelphia Roll,"A roll with salmon, cream cheese, and cucumber.",public/images/dishes/philadelphia-roll-52.webp,yes
+dragon-roll-50,Ролл Дракон,Dragon Roll,"A roll with shrimp, eel, avocado, and tobiko caviar.",public/images/dishes/dragon-roll-50.webp,yes
+spicy-ebi-unagi-roll-49,Острый ролл с угрём и креветкой,Spicy Shrimp and Eel Roll,"A roll with shrimp, eel, avocado, cream cheese, and spicy sauce.",public/images/dishes/spicy-ebi-unagi-roll-49.webp,yes
+unagi-roll-53,Запечённый ролл с угрём,Baked Eel Roll,"A warm baked roll with eel, avocado, and cream cheese.",public/images/dishes/unagi-roll-53.webp,yes
+tempura-roll-54,Темпура-ролл,Tempura Roll,"A hot tempura-battered roll with eel, salmon, and cream cheese.",public/images/dishes/tempura-roll-54.webp,yes
+gyoza-17,Гёдза с мясом,Pork Gyoza,Pan-fried Japanese dumplings of thin dough with a meat filling.,public/images/dishes/gyoza-17.webp,yes
+shrimp-gyoza-65,Гёдза с креветкой,Shrimp Gyoza,Pan-fried Japanese dumplings of thin dough with a shrimp filling.,public/images/dishes/shrimp-gyoza-65.webp,yes
+onion-gyoza-67,Овощные гёдза,Vegetable Gyoza,Pan-fried Japanese dumplings with an onion and vegetable filling.,public/images/dishes/onion-gyoza-67.webp,yes
+tempura-09,Креветки темпура,Shrimp Tempura,Shrimp in a light crispy batter with dipping sauce.,public/images/dishes/tempura-09.webp,yes
+karaage-chicken-59,Курица караагэ,Chicken Karaage,Japanese-style crispy breaded chicken pieces.,public/images/dishes/karaage-chicken-59.webp,yes
+spicy-chicken-wings-58,Острые куриные крылья,Spicy Chicken Wings,Fried chicken wings in a spicy sauce.,public/images/dishes/spicy-chicken-wings-58.webp,yes
+duck-spring-roll-56,Спринг-ролл с уткой,Duck Spring Roll,A crispy fried roll of thin dough with duck and vegetables.,public/images/dishes/duck-spring-roll-56.webp,yes
+vegetable-spring-roll-57,Овощной спринг-ролл,Vegetable Spring Roll,A crispy fried roll of thin dough with a vegetable filling.,public/images/dishes/vegetable-spring-roll-57.webp,yes
+potato-croquettes-60,Картофельные крокеты,Potato Croquettes,Crispy fried potato croquettes.,public/images/dishes/potato-croquettes-60.webp,yes
+fried-mozzarella-61,Жареная моцарелла,Fried Mozzarella,Breaded mozzarella fried until crisp.,public/images/dishes/fried-mozzarella-61.webp,yes
+crispy-eggplant-55,Хрустящий баклажан,Crispy Eggplant,Breaded crispy eggplant with sweet-and-sour sauce and walnuts.,public/images/dishes/crispy-eggplant-55.webp,yes
+tuna-tartare-39,Тартар из тунца,Tuna Tartare,Chopped raw tuna with crispy rice.,public/images/dishes/tuna-tartare-39.webp,yes
+salmon-tataki-41,Татаки из лосося,Salmon Tataki,Salmon lightly seared outside and nearly raw inside.,public/images/dishes/salmon-tataki-41.webp,yes
+beef-tataki-42,Татаки из говядины,Beef Tataki,Beef lightly seared outside and nearly raw inside.,public/images/dishes/beef-tataki-42.webp,yes
+shrimp-avocado-salad-43,Салат с креветками и авокадо,Shrimp and Avocado Salad,"Salad with shrimp, avocado, and wasabi dressing.",public/images/dishes/shrimp-avocado-salad-43.webp,yes
+duck-potato-salad-37,Картофельный салат с уткой,Duck Potato Salad,Potato salad with pieces of duck.,public/images/dishes/duck-potato-salad-37.webp,yes
+edamame-32,Эдамаме,Edamame,Young soybeans with salt.,public/images/dishes/edamame-32.webp,yes
+kimchi-35,Кимчи,Kimchi,Spicy Korean fermented cabbage.,public/images/dishes/kimchi-35.webp,yes
+carrot-salad-34,Морковный салат,Carrot Salad,A light carrot salad in an Asian-style dressing.,public/images/dishes/carrot-salad-34.webp,yes
+smashed-cucumbers-45,Битые огурцы,Smashed Cucumbers,Crushed crispy cucumbers in an Asian-style dressing.,public/images/dishes/smashed-cucumbers-45.webp,yes
+muer-mushrooms-30,Грибы муэр,Wood Ear Mushrooms,Wood ear mushrooms in sweet-and-sour sauce with peanuts.,public/images/dishes/muer-mushrooms-30.webp,yes
+plov-01,Плов,Plov,"Rice with lamb, carrots, chickpeas, and spices cooked in a kazan.",public/images/dishes/plov-01.webp,yes
+lagman-02,Лагман,Lagman,"A soup with hand-pulled noodles, meat, and vegetables.",public/images/dishes/lagman-02.webp,yes
+uyghur-lagman-169,Уйгурский лагман,Uyghur Lagman,"Hand-pulled noodles with lamb, thick vegetable gravy, and spices.",public/images/dishes/uyghur-lagman-169.webp,yes
+fried-lagman-179,Ковурма лагман,Fried Lagman,"Stir-fried noodles with meat, vegetables, herbs, and egg.",public/images/dishes/fried-lagman-179.webp,yes
+mastava-06,Мастава,Mastava,"Uzbek rice soup with meat, vegetables, and spices.",public/images/dishes/mastava-06.webp,yes
+shurpa-12,Шурпа,Shurpa,A hearty broth with large pieces of lamb and vegetables.,public/images/dishes/shurpa-12.webp,yes
+mampar-174,Мампар,Mampar,A thick meat soup with vegetables and torn dough pieces.,public/images/dishes/mampar-174.webp,yes
+meatball-soup-176,Суп с фрикадельками,Meatball Soup,"Meat soup with meatballs, vegetables, and noodles.",public/images/dishes/meatball-soup-176.webp,yes
+chicken-soup-219,Куриный суп,Chicken Soup,Clear chicken broth with pieces of chicken and vegetables.,public/images/dishes/chicken-soup-219.webp,yes
+mash-soup-211,Машевый суп,Mung Bean Soup,A hot mung bean soup with vegetables and oriental spices.,public/images/dishes/mash-soup-211.webp,yes
+ganpan-178,Ганпан,Ganpan,Rice with lamb and a spicy vegetable gravy.,public/images/dishes/ganpan-178.webp,yes
+mashkichiri-207,Машкичири,Mashkichiri,"A thick dish of mung beans, rice, meat, and vegetables.",public/images/dishes/mashkichiri-207.webp,yes
+dolma-195,Долма,Dolma,A meat and rice filling wrapped in grape leaves.,public/images/dishes/dolma-195.webp,yes
+kazan-kebab-10,Казан-кабоб,Kazan Kebab,"Lamb with potatoes, fried in a kazan with spices.",public/images/dishes/kazan-kebab-10.webp,yes
+sokoro-182,Сокоро,Sokoro,Tender lamb fried with onions.,public/images/dishes/sokoro-182.webp,yes
+meat-sai-184,Сай с мясом,Lamb Sai,Fried lamb with vegetables in a spicy gravy.,public/images/dishes/meat-sai-184.webp,yes
+chicken-sai-188,Куриный сай,Chicken Sai,Fried chicken with vegetables and spices.,public/images/dishes/chicken-sai-188.webp,yes
+vaguri-209,Вагури,Vaguri,"Lamb on the bone, fried with spices until golden-brown.",public/images/dishes/vaguri-209.webp,yes
+lamb-ribs-potatoes-189,Бараньи рёбрышки с картофелем,Lamb Ribs with Potatoes,Fried lamb ribs with potatoes and spices.,public/images/dishes/lamb-ribs-potatoes-189.webp,yes
+olive-oil-chicken-187,Цыплёнок на оливковом масле,Olive Oil Chicken,Marinated chicken fried in olive oil with vegetables.,public/images/dishes/olive-oil-chicken-187.webp,yes
+beef-stew-186,Тушёная говядина,Beef Stew,Beef braised with spices and onions.,public/images/dishes/beef-stew-186.webp,yes
+beef-tail-190,Думгаза,Dumgaza,Braised beef tail with vegetables and spices.,public/images/dishes/beef-tail-190.webp,yes
+halim-206,Халим,Halim,A thick dish of long-simmered wheat and meat.,public/images/dishes/halim-206.webp,yes
+norin-08,Норин,Norin,"Thinly sliced noodles with horse meat, served with broth.",public/images/dishes/norin-08.webp,yes
+beshbarmak-11,Бешбармак,Beshbarmak,"Boiled meat with wide noodles, onions, and broth.",public/images/dishes/beshbarmak-11.webp,yes
+manti-03,Манты,Manti,Steamed thin-dough dumplings with lamb and onion.,public/images/dishes/manti-03.webp,yes
+juvava-194,Жувава,Juvava,Uyghur dumplings of thin dough with a meat filling.,public/images/dishes/juvava-194.webp,yes
+chuchvara-09,Чучвара,Chuchvara,"Small dumplings with meat, served in broth or with sour cream.",public/images/dishes/chuchvara-09.webp,yes
+hanum-14,Ханум,Hanum,A steamed roll of thin dough with meat and onion.,public/images/dishes/hanum-14.webp,yes
+dimlama-07,Димлама,Dimlama,"Meat braised in a kazan with potatoes, cabbage, and vegetables.",public/images/dishes/dimlama-07.webp,yes
+tandir-gosht-15,Тандыр гушт,Tandir Gosht,Lamb slow-cooked in a tandoor until tender.,public/images/dishes/tandir-gosht-15.webp,yes
+samsa-04,Самса,Samsa,"Flaky pastry with lamb and onion, baked in a tandoor.",public/images/dishes/samsa-04.webp,yes
+hoshang-197,Хошан,Hoshan,Fried yeast pastries with meat and onion.,public/images/dishes/hoshang-197.webp,yes
+qurutob-213,Курутоб,Qurutob,"Pieces of flatbread with a fermented-milk sauce, onion, tomatoes, and herbs.",public/images/dishes/qurutob-213.webp,yes
+shashlik-05,Шашлык,Shashlik,Marinated lamb or beef grilled over charcoal.,public/images/dishes/shashlik-05.webp,yes
+chicken-shashlik-201,Шашлык из курицы,Chicken Shashlik,Marinated chicken pieces grilled over charcoal.,public/images/dishes/chicken-shashlik-201.webp,yes
+ground-meat-shashlik-202,Люля-кебаб,Lyulya Kebab,Spiced ground meat grilled over charcoal.,public/images/dishes/ground-meat-shashlik-202.webp,yes
+vegetable-shashlik-218,Овощной шашлык,Vegetable Shashlik,Vegetables grilled over charcoal.,public/images/dishes/vegetable-shashlik-218.webp,yes
+achichuk-203,Ачичук,Achichuk,A salad of thinly sliced tomatoes and onion.,public/images/dishes/achichuk-203.webp,yes
+suzma-212,Сузьма,Suzma,"A thick, creamy fermented-milk appetizer.",public/images/dishes/suzma-212.webp,yes
+tuna-salad-88,Салат с тунцом,Tuna Salad,"Salad with tuna, vegetables, and mustard dressing.",public/images/dishes/tuna-salad-88.webp,yes
+crab-stracciatella-salad-89,Салат с крабом и страчателлой,Crab and Stracciatella Salad,Salad with crab and soft stracciatella cheese.,public/images/dishes/crab-stracciatella-salad-89.webp,yes
+chicken-liver-salad-91,Салат с куриной печенью,Chicken Liver Salad,Salad greens with sautéed chicken liver.,public/images/dishes/chicken-liver-salad-91.webp,yes
+romano-salad-93,Салат Романо,Romano Salad,Romaine salad with chicken or shrimp.,public/images/dishes/romano-salad-93.webp,yes
+halloumi-tomato-salad-94,Салат с халлуми и томатами,Halloumi and Tomato Salad,Salad with grilled halloumi cheese and fresh tomatoes.,public/images/dishes/halloumi-tomato-salad-94.webp,yes
+green-berry-gorgonzola-salad-95,Зелёный салат с ягодами и горгонзолой,Green Salad with Berries and Gorgonzola,Green salad with berries and gorgonzola cheese.,public/images/dishes/green-berry-gorgonzola-salad-95.webp,yes
+shrimp-avocado-salad-96,Салат с креветками и авокадо,Shrimp and Avocado Salad,"Salad with shrimp, tomatoes, and avocado.",public/images/dishes/shrimp-avocado-salad-96.webp,yes
+pumpkin-cream-soup-102,Тыквенный крем-суп,Pumpkin Cream Soup,Pumpkin cream soup with stracciatella.,public/images/dishes/pumpkin-cream-soup-102.webp,yes
+creamy-trout-soup-103,Сливочный суп с форелью,Creamy Trout Soup,Creamy soup with trout and dill.,public/images/dishes/creamy-trout-soup-103.webp,yes
+seafood-soup-105,Суп с морепродуктами,Seafood Soup,Fish broth with an assortment of seafood.,public/images/dishes/seafood-soup-105.webp,yes
+mushroom-tortellini-soup-106,Грибной суп с тортеллини,Mushroom Soup with Tortellini,Mushroom soup with chicken-filled tortellini.,public/images/dishes/mushroom-tortellini-soup-106.webp,yes
+pizza-04,Пицца Маргарита,Margherita Pizza,"Pizza with tomato sauce, mozzarella, and basil.",public/images/dishes/pizza-04.webp,yes
+pizza-pepperoni-10,Пицца Пепперони,Pepperoni Pizza,"Pizza with pepperoni, tomato sauce, and mozzarella.",public/images/dishes/pizza-pepperoni-10.webp,yes
+diablo-pizza-109,Пицца Диабло,Diablo Pizza,"A spicy pizza with jalapeños, tomato sauce, and cheese.",public/images/dishes/diablo-pizza-109.webp,yes
+four-cheese-pizza-111,Пицца Четыре сыра,Four Cheese Pizza,Pizza with a blend of four cheeses.,public/images/dishes/four-cheese-pizza-111.webp,yes
+ham-mushroom-pizza-114,Пицца с ветчиной и грибами,Ham and Mushroom Pizza,"Pizza with ham, mushrooms, and cheese.",public/images/dishes/ham-mushroom-pizza-114.webp,yes
+lasagna-02,Лазанья Болоньезе,Lasagna Bolognese,"Layered pasta with meaty bolognese sauce, béchamel, and cheese.",public/images/dishes/lasagna-02.webp,yes
+carbonara-01,Спагетти Карбонара,Spaghetti Carbonara,"Spaghetti with beef bacon, egg yolk, and cheese in carbonara sauce.",public/images/dishes/carbonara-01.webp,yes
+spaghetti-bolognese-130,Спагетти Болоньезе,Spaghetti Bolognese,Spaghetti with meaty bolognese sauce and burrata.,public/images/dishes/spaghetti-bolognese-130.webp,yes
+spaghetti-alfredo-134,Спагетти Альфредо,Spaghetti Alfredo,Spaghetti in a creamy cheese Alfredo sauce.,public/images/dishes/spaghetti-alfredo-134.webp,yes
+spaghetti-pomodoro-121,Спагетти аль помодоро,Spaghetti al Pomodoro,Spaghetti in tomato sauce with stracciatella.,public/images/dishes/spaghetti-pomodoro-121.webp,yes
+penne-arrabbiata-beef-123,Пенне арабьята с говядиной,Penne Arrabbiata with Beef,Spicy penne pasta in tomato sauce with beef and stracciatella.,public/images/dishes/penne-arrabbiata-beef-123.webp,yes
+pappardelle-beef-124,Паппарделле с говядиной,Pappardelle with Beef,Wide pappardelle pasta with beef in a peppery sauce.,public/images/dishes/pappardelle-beef-124.webp,yes
+farfalle-salmon-119,Фарфалле с лососем,Farfalle with Salmon,Farfalle pasta with salmon and cherry tomatoes.,public/images/dishes/farfalle-salmon-119.webp,yes
+seafood-spaghetti-127,Спагетти с морепродуктами,Seafood Spaghetti,Spaghetti with an assortment of seafood.,public/images/dishes/seafood-spaghetti-127.webp,yes
+creamy-ptitim-shrimp-132,Птитим с креветками,Ptitim with Shrimp,Small pearl pasta with shrimp in a creamy sauce.,public/images/dishes/creamy-ptitim-shrimp-132.webp,yes
+crab-shrimp-ravioli-129,Равиоли с крабом и креветками,Crab and Shrimp Ravioli,Ravioli filled with crab and shrimp.,public/images/dishes/crab-shrimp-ravioli-129.webp,yes
+risotto-03,Ризотто с белыми грибами,Porcini Risotto,"Creamy risotto with porcini mushrooms, parmesan, and truffle oil.",public/images/dishes/risotto-03.webp,yes
+seafood-risotto-128,Ризотто с морепродуктами,Seafood Risotto,Risotto with an assortment of seafood.,public/images/dishes/seafood-risotto-128.webp,yes
+mediterranean-seabass-115,Сибас по-средиземноморски,Mediterranean Sea Bass,Sea bass with olives and tomatoes in white wine.,public/images/dishes/mediterranean-seabass-115.webp,yes
+livornese-trout-116,Форель в соусе ливорнезе,Trout Livornese,Trout fillet in tomato sauce with mashed potatoes and spinach.,public/images/dishes/livornese-trout-116.webp,yes
+dorado-tomatoes-capers-117,Дорадо с томатами и каперсами,Dorado with Tomatoes and Capers,Dorado fillet with tomatoes and capers.,public/images/dishes/dorado-tomatoes-capers-117.webp,yes
+trout-pesto-118,Форель с томатами и песто,Trout with Tomatoes and Pesto,Trout fillet with fresh tomatoes and pesto sauce.,public/images/dishes/trout-pesto-118.webp,yes
+grilled-trout-153,Форель гриль,Grilled Trout,Grilled trout with vegetables.,public/images/dishes/grilled-trout-153.webp,yes
+grilled-shrimp-148,Креветки гриль,Grilled Shrimp,Shrimp cooked on the grill.,public/images/dishes/grilled-shrimp-148.webp,yes
+stuffed-squid-147,Фаршированный кальмар,Stuffed Squid,Stuffed squid cooked on the grill.,public/images/dishes/stuffed-squid-147.webp,yes
+ribeye-steak-144,Стейк рибай,Ribeye Steak,"A marbled beef ribeye steak, grilled.",public/images/dishes/ribeye-steak-144.webp,yes
+grilled-filet-mignon-152,Филе-миньон,Filet Mignon,Grilled filet mignon with spinach and porcini mushrooms.,public/images/dishes/grilled-filet-mignon-152.webp,yes
+lamb-rack-150,Каре ягнёнка,Rack of Lamb,Grilled rack of lamb with vegetables.,public/images/dishes/lamb-rack-150.webp,yes
+grilled-duck-breast-146,Утиная грудка гриль,Grilled Duck Breast,Duck breast cooked on the grill.,public/images/dishes/grilled-duck-breast-146.webp,yes
+grilled-chicken-149,Цыплёнок гриль,Grilled Chicken,Chicken cooked on the grill.,public/images/dishes/grilled-chicken-149.webp,yes
+chicken-mozzarella-136,Куриная грудка с моцареллой,Chicken Breast with Mozzarella,Chicken breast baked with mozzarella and vegetables.,public/images/dishes/chicken-mozzarella-136.webp,yes
+chicken-cutlets-mash-137,Куриные котлеты с пюре,Chicken Cutlets with Mash,Chicken cutlets with mashed potatoes and mushroom sauce.,public/images/dishes/chicken-cutlets-mash-137.webp,yes
+beef-cheeks-mash-139,Говяжьи щёчки с пюре,Beef Cheeks with Mash,Braised beef cheeks with mashed potatoes.,public/images/dishes/beef-cheeks-mash-139.webp,yes
+lamb-shank-vegetables-140,Голень ягнёнка с овощами,Lamb Shank with Vegetables,Braised lamb shank with vegetables.,public/images/dishes/lamb-shank-vegetables-140.webp,yes
+beef-scaloppine-141,Скалоппине из говядины,Beef Scaloppine,Thin pan-seared beef slices with green beans.,public/images/dishes/beef-scaloppine-141.webp,yes
+crab-shrimp-bruschetta-79,Брускетта с крабом и креветками,Crab and Shrimp Bruschetta,Toasted bread with crab and shrimp.,public/images/dishes/crab-shrimp-bruschetta-79.webp,yes
+beef-carpaccio-81,Карпаччо из говядины,Beef Carpaccio,Thinly sliced raw beef with a light dressing.,public/images/dishes/beef-carpaccio-81.webp,yes
+beef-tartare-82,Тартар из говядины,Beef Tartare,Chopped raw beef with seasonings and toast.,public/images/dishes/beef-tartare-82.webp,yes
+vitello-tonnato-84,Вителло тоннато,Vitello Tonnato,Thin slices of veal with tuna sauce and parmesan.,public/images/dishes/vitello-tonnato-84.webp,yes
+chicken-liver-pate-85,Паштет из куриной печени,Chicken Liver Pâté,A delicate chicken liver pâté with toasted bread.,public/images/dishes/chicken-liver-pate-85.webp,yes
+burrata-tomatoes-86,Буррата с томатами,Burrata with Tomatoes,Burrata with fresh tomatoes and balsamic dressing.,public/images/dishes/burrata-tomatoes-86.webp,yes
+baked-eggplant-stracciatella-83,Печёный баклажан со страчателлой,Baked Eggplant with Stracciatella,Baked eggplant with stracciatella and tomatoes.,public/images/dishes/baked-eggplant-stracciatella-83.webp,yes
+cucumber-yogurt-salad-90,Салат из огурцов с йогуртом,Cucumber and Yogurt Salad,Fresh cucumbers with yogurt and mint.,public/images/dishes/cucumber-yogurt-salad-90.webp,yes
+vegetable-olive-salad-92,Овощной салат с оливками,Vegetable Salad with Olives,A salad of fresh vegetables and olives.,public/images/dishes/vegetable-olive-salad-92.webp,yes
+garlic-mussels-98,Мидии в чесночном соусе,Mussels in Garlic Sauce,Hot mussels in garlic sauce.,public/images/dishes/garlic-mussels-98.webp,yes
+tuscan-langoustines-101,Лангустины по-тоскански,Tuscan-Style Langoustines,Langoustines prepared in the Tuscan style.,public/images/dishes/tuscan-langoustines-101.webp,yes
+veal-liver-onion-mousse-100,Телячья печень с луковым муссом,Veal Liver with Onion Mousse,Sautéed veal liver with onion mousse.,public/images/dishes/veal-liver-onion-mousse-100.webp,yes
+grilled-vegetables-156,Овощи гриль,Grilled Vegetables,An assortment of vegetables cooked on the grill.,public/images/dishes/grilled-vegetables-156.webp,yes
+baked-rosemary-potatoes-155,Печёный картофель с розмарином,Baked Rosemary Potatoes,Roasted potatoes with rosemary.,public/images/dishes/baked-rosemary-potatoes-155.webp,yes
+mashed-potatoes-mushroom-157,Картофельное пюре с грибным соусом,Mashed Potatoes with Mushroom Sauce,Mashed potatoes with a mushroom velouté sauce.,public/images/dishes/mashed-potatoes-mushroom-157.webp,yes
+tiramisu-16,Тирамису,Tiramisu,"An Italian dessert with mascarpone cream, coffee, and savoiardi biscuits.",public/images/dishes/tiramisu-16.webp,yes
+cannoli-160,Канноли,Cannoli,Crispy Sicilian tubes with a sweet ricotta filling.,public/images/dishes/cannoli-160.webp,yes
+chocolate-crostata-167,Шоколадная кростата,Chocolate Crostata,An Italian chocolate tart with raspberries.,public/images/dishes/chocolate-crostata-167.webp,yes
+chocolate-mint-cake-164,Шоколадный торт с мятным кремом,Chocolate Mint Cake,Chocolate cake with mint cream.,public/images/dishes/chocolate-mint-cake-164.webp,yes
+brownie-cookie-165,Брауни,Brownie,A soft chocolate brownie dessert.,public/images/dishes/brownie-cookie-165.webp,yes
+gelato-158,Джелато,Gelato,Italian creamy ice cream.,public/images/dishes/gelato-158.webp,yes
+sorbet-159,Сорбет,Sorbet,A frozen fruit dessert without dairy.,public/images/dishes/sorbet-159.webp,yes
+burger-01,Бургер,Burger,"A bun with a beef patty, vegetables, and sauce.",public/images/dishes/burger-01.webp,yes
+jalapeno-burger-327,Бургер с халапеньо,Jalapeño Burger,A burger with a patty and spicy jalapeño peppers.,public/images/dishes/jalapeno-burger-327.webp,yes
+burrito-08,Буррито,Burrito,"A tortilla with meat, rice, beans, cheese, and sauce.",public/images/dishes/burrito-08.webp,yes
+quesadilla-14,Кесадилья,Quesadilla,A toasted tortilla with cheese and a meat filling.,public/images/dishes/quesadilla-14.webp,yes
+taco-09,Тако,Taco,"A corn tortilla with meat, vegetables, and cheese.",public/images/dishes/taco-09.webp,yes
+club-sandwich-07,Клаб-сэндвич,Club Sandwich,"A layered sandwich with chicken, egg, cheese, and vegetables.",public/images/dishes/club-sandwich-07.webp,yes
+sub-sandwich-15,Саб-сэндвич,Sub Sandwich,"A long sandwich with meat, cheese, and vegetables.",public/images/dishes/sub-sandwich-15.webp,yes
+haggi-300,Хагги,Haggi,"A hot baguette with meat, vegetables, cheese, and sauces.",public/images/dishes/haggi-300.webp,yes
+longer-301,Лонгер,Longer,"An elongated sandwich with crispy chicken, vegetables, and sauce.",public/images/dishes/longer-301.webp,yes
+wrap-12,Лаваш,Lavash Wrap,Meat and fresh vegetables with sauce wrapped in thin lavash flatbread.,public/images/dishes/wrap-12.webp,yes
+pita-doner-299,Пита-донер,Pita Döner,Döner meat with vegetables and sauce in pita bread.,public/images/dishes/pita-doner-299.webp,yes
+doner-mix-324,Донер-микс,Döner Mix,"Döner meat with potatoes, vegetables, and sauce on a plate.",public/images/dishes/doner-mix-324.webp,yes
+hot-dog-03,Хот-дог,Hot Dog,A bun with a sausage and sauces.,public/images/dishes/hot-dog-03.webp,yes
+corn-dog-13,Корн-дог,Corn Dog,A sausage in cornmeal batter on a stick.,public/images/dishes/corn-dog-13.webp,yes
+fried-chicken-05,Жареная курица,Fried Chicken,"Crispy breaded chicken pieces, deep-fried.",public/images/dishes/fried-chicken-05.webp,yes
+egg-cheddar-muffin-312,Маффин с яйцом и чеддером,Egg and Cheddar Muffin,An English muffin with egg and cheddar cheese.,public/images/dishes/egg-cheddar-muffin-312.webp,yes
+caesar-salad-320,Салат Цезарь,Caesar Salad,"Lettuce with cheese, croutons, and Caesar dressing.",public/images/dishes/caesar-salad-320.webp,yes
+chicken-wings-16,Куриные крылышки,Chicken Wings,Chicken wings in a crispy breading.,public/images/dishes/chicken-wings-16.webp,yes
+nuggets-06,Наггетсы,Nuggets,Pieces of chicken fillet in a crispy breading.,public/images/dishes/nuggets-06.webp,yes
+chicken-strips-306,Куриные стрипсы,Chicken Strips,Strips of chicken fillet in a crispy breading.,public/images/dishes/chicken-strips-306.webp,yes
+fries-04,Картофель фри,French Fries,Fried potato sticks.,public/images/dishes/fries-04.webp,yes
+potato-wedges-309,Картофель по-деревенски,Potato Wedges,Spiced potato wedges fried until golden-brown.,public/images/dishes/potato-wedges-309.webp,yes
+onion-rings-11,Луковые кольца,Onion Rings,Rings of onion in a crispy breading.,public/images/dishes/onion-rings-11.webp,yes
+cheese-fingers-322,Сырные палочки,Cheese Fingers,"Breaded cheese sticks, deep-fried.",public/images/dishes/cheese-fingers-322.webp,yes
+adana-kebab-220,Адана-кебаб,Adana Kebab,A spicy minced lamb kebab grilled over coals.,public/images/dishes/adana-kebab-220.webp,yes
+urfa-kebab-221,Урфа-кебаб,Urfa Kebab,"A minced meat kebab with mild spices, grilled over coals.",public/images/dishes/urfa-kebab-221.webp,yes
+ali-nazik-kebab-222,Али назик кебаб,Ali Nazik Kebab,A kebab served over smoky baked eggplant purée with yogurt.,public/images/dishes/ali-nazik-kebab-222.webp,yes
+kofta-07,Изгара кёфте,Izgara Köfte,Grilled beef and lamb patties with eggplant purée and yogurt.,public/images/dishes/kofta-07.webp,yes
+kashar-kofte-228,Кёфте с сыром,Cheese-Stuffed Köfte,Grilled köfte filled with kashar cheese.,public/images/dishes/kashar-kofte-228.webp,yes
+juicy-kofte-229,Кёфте в томатном соусе,Köfte in Tomato Sauce,Small meat köfte in tomato sauce.,public/images/dishes/juicy-kofte-229.webp,yes
+kashar-beyti-223,Бейти с сыром,Cheese Beyti,"A lamb kebab in lavash with tomato sauce, kashar cheese, and pistachios.",public/images/dishes/kashar-beyti-223.webp,yes
+iskender-kebab-224,Искандер-кебаб,İskender Kebab,"Döner over flatbread with tomato sauce, yogurt, and melted butter.",public/images/dishes/iskender-kebab-224.webp,yes
+doner-01,Дюрюм,Dürüm,Döner with vegetables and garlic sauce wrapped in thin flatbread.,public/images/dishes/doner-01.webp,yes
+arayes-241,Арайес,Arayes,"Pita stuffed with meat, grilled until crispy.",public/images/dishes/arayes-241.webp,yes
+crispy-manti-231,Хрустящие турецкие манты,Crispy Turkish Manti,"Mini beef manti, fried and served with yogurt and tomato sauce.",public/images/dishes/crispy-manti-231.webp,yes
+lahmacun-232,Лахмаджун,Lahmacun,"A thin crispy flatbread with minced meat, vegetables, and spices.",public/images/dishes/lahmacun-232.webp,yes
+beef-pide-233,Пиде с мясом,Beef Pide,"A Turkish boat-shaped bread with beef, vegetables, and spices.",public/images/dishes/beef-pide-233.webp,yes
+kashar-beef-pide-235,Пиде с мясом и сыром,Beef and Cheese Pide,"Pide with beef, vegetables, and kashar cheese.",public/images/dishes/kashar-beef-pide-235.webp,yes
+cheese-pide-236,Пиде с сыром,Cheese Pide,Turkish pide with melted kashar cheese.,public/images/dishes/cheese-pide-236.webp,yes
+spinach-cheese-pide-237,Пиде со шпинатом и сыром,Spinach and Cheese Pide,Closed pide with spinach and kashar cheese.,public/images/dishes/spinach-cheese-pide-237.webp,yes
+manakish-09,Манакиш с заатаром,Za'atar Manakish,An Arabic flatbread with a fragrant za'atar spice blend and olive oil.,public/images/dishes/manakish-09.webp,yes
+simit-sandwich-269,Симит-сэндвич,Simit Sandwich,"A sesame-crusted simit bagel with meat, fresh vegetables, and dressing.",public/images/dishes/simit-sandwich-269.webp,yes
+lebanese-beef-244,Пряная говядина по-ливански,Lebanese Spiced Beef,Braised spicy beef with vegetables in pita.,public/images/dishes/lebanese-beef-244.webp,yes
+aleppo-chicken-243,Лимонный цыплёнок по-алеппски,Aleppo-Style Lemon Chicken,"Chicken with lemon, olive oil, sumac, and chili.",public/images/dishes/aleppo-chicken-243.webp,yes
+harbiya-chicken-247,Курица харбия,Harbiya Chicken,"Marinated chicken thighs, grilled, with rice and vegetables.",public/images/dishes/harbiya-chicken-247.webp,yes
+machboos-12,Кабса с ягнёнком,Lamb Machboos,Braised lamb shank with fragrant spiced rice.,public/images/dishes/machboos-12.webp,yes
+asado-ribs-246,Асадо из говяжьих рёбер,Beef Rib Asado,Braised beef ribs in a spiced marinade and barbecue glaze.,public/images/dishes/asado-ribs-246.webp,yes
+lamb-ribs-yogurt-248,Рёбрышки ягнёнка с баклажановым пюре,Lamb Ribs with Eggplant Purée,Grilled lamb ribs with eggplant purée and yogurt.,public/images/dishes/lamb-ribs-yogurt-248.webp,yes
+dorada-grill-249,Дорада на мангале,Grilled Dorada,"A whole dorada fish with herbs, grilled.",public/images/dishes/dorada-grill-249.webp,yes
+trout-cheese-sauce-250,Форель с сырным соусом,Trout with Cheese Sauce,A whole grilled trout with cheese sauce.,public/images/dishes/trout-cheese-sauce-250.webp,yes
+sucuk-eggs-268,Яичница с суджуком,Eggs with Sujuk,Fried eggs with spicy Turkish sujuk sausage.,public/images/dishes/sucuk-eggs-268.webp,yes
+merdgimek-14,Суп Эзогелин,Ezogelin Soup,"A Turkish soup of red lentils, bulgur, tomatoes, and spices.",public/images/dishes/merdgimek-14.webp,yes
+yayla-soup-265,Суп Яйла,Yayla Soup,A yogurt soup with rice and dried mint.,public/images/dishes/yayla-soup-265.webp,yes
+tongue-soup-266,Суп из говяжьего языка,Beef Tongue Soup,A hot soup of beef tongue with vegetables.,public/images/dishes/tongue-soup-266.webp,yes
+choban-salad-262,Салат Чобан,Shepherd's Salad,A Turkish salad of fresh chopped vegetables with pomegranate dressing.,public/images/dishes/choban-salad-262.webp,yes
+lentil-orange-salad-261,Салат с чечевицей и апельсином,Lentil and Orange Salad,"A salad of lentils, orange, and vegetables with pomegranate dressing.",public/images/dishes/lentil-orange-salad-261.webp,yes
+tulum-salad-263,Салат с сыром тулум,Tulum Cheese Salad,Fresh greens with tulum goat cheese and citrus dressing.,public/images/dishes/tulum-salad-263.webp,yes
+kibbeh-08,Ичли кёфте,Içli Köfte,"Crispy bulgur balls with a meat filling, deep-fried.",public/images/dishes/kibbeh-08.webp,yes
+hummus-04,Хумус из чечевицы,Lentil Hummus,A creamy lentil appetizer with pomegranate and olive oil.,public/images/dishes/hummus-04.webp,yes
+baba-ganoush-11,Мутабаль,Mutabal,A smoky baked eggplant dip with tahini and lemon.,public/images/dishes/baba-ganoush-11.webp,yes
+muhammara-251,Мухаммара,Muhammara,A paste of roasted red peppers with walnuts and spices.,public/images/dishes/muhammara-251.webp,yes
+ezme-255,Эзме,Ezme,"A spicy appetizer of finely chopped tomatoes, pepper, and onion.",public/images/dishes/ezme-255.webp,yes
+haydari-254,Хайдари,Haydari,A thick yogurt dip with mint and olive oil.,public/images/dishes/haydari-254.webp,yes
+taramosalata-253,Тарамасалата,Taramosalata,A creamy fish roe dip with olive oil.,public/images/dishes/taramosalata-253.webp,yes
+labneh-beet-259,Лабне со свёклой,Labneh with Beets,"Soft labneh cheese with roasted beets, herbs, and olive oil.",public/images/dishes/labneh-beet-259.webp,yes
+labneh-lentil-260,Лабне с чечевичным хумусом,Labneh with Lentil Hummus,"Labneh with lentil hummus, vegetables, nuts, and pomegranate.",public/images/dishes/labneh-lentil-260.webp,yes
+turkish-dolma-257,Турецкая овощная долма,Turkish Vegetable Dolma,"Dolma of rice, nuts, and vegetables with spices.",public/images/dishes/turkish-dolma-257.webp,yes
+sucuk-267,Суджук,Sujuk,A spicy dried Turkish beef sausage.,public/images/dishes/sucuk-267.webp,yes
+baklava-16,Баклава,Baklava,"Layered pastry with pistachios, soaked in syrup.",public/images/dishes/baklava-16.webp,yes
+cold-baklava-272,Холодная баклава,Cold Baklava,"Baklava with pistachios, soaked in a milk sauce, with chocolate.",public/images/dishes/cold-baklava-272.webp,yes
+katmer-271,Катмер,Katmer,A warm dessert of thin flaky dough with cream and pistachios.,public/images/dishes/katmer-271.webp,yes
+honey-pistachio-pide-238,Сладкое пиде с мёдом и фисташками,Sweet Pide with Honey and Pistachios,"Pide with cheese, pistachios, kaymak clotted cream, and honey.",public/images/dishes/honey-pistachio-pide-238.webp,yes
+honey-kaymak-270,Каймак с мёдом,Kaymak with Honey,Thick kaymak clotted cream with natural honey.,public/images/dishes/honey-kaymak-270.webp,yes
+trilece-275,Трилече,Tres Leches Cake,A sponge cake soaked in a three-milk mixture.,public/images/dishes/trilece-275.webp,yes
+borsch-01,Борщ,Borscht,"A beet soup with beef, cabbage, and vegetables, served with sour cream.",public/images/dishes/borsch-01.webp,yes
+shchi-12,Щи,Shchi,"A cabbage soup with meat and vegetables, served with sour cream.",public/images/dishes/shchi-12.webp,yes
+solyanka-04,Солянка,Solyanka,"A sour-salty soup with meat, smoked meats, pickles, and olives.",public/images/dishes/solyanka-04.webp,yes
+okroshka-05,Окрошка,Okroshka,"A cold soup on kvass or kefir with potatoes, meat, egg, cucumber, and herbs.",public/images/dishes/okroshka-05.webp,yes
+chicken-noodle-soup-278,Домашняя лапша с курицей,Homemade Chicken Noodle Soup,Chicken soup with homemade noodles and herbs.,public/images/dishes/chicken-noodle-soup-278.webp,yes
+pelmeni-02,Пельмени,Pelmeni,"Boiled dough dumplings with a meat filling, served with sour cream.",public/images/dishes/pelmeni-02.webp,yes
+vareniki-03,Вареники,Vareniki,"Dough dumplings with a potato or cottage-cheese filling, served with sour cream.",public/images/dishes/vareniki-03.webp,yes
+pirozhki-13,Пирожки,Pirozhki,"Small pastries with a meat, vegetable, or sweet filling.",public/images/dishes/pirozhki-13.webp,yes
+blini-15,Блины,Blini,Thin pancakes with a meat or sweet filling.,public/images/dishes/blini-15.webp,yes
+syrniki-11,Сырники,Syrniki,"Cottage-cheese pancakes, pan-fried, with sour cream or jam.",public/images/dishes/syrniki-11.webp,yes
+draniki-07,Драники,Draniki,"Potato pancakes, pan-fried, with sour cream.",public/images/dishes/draniki-07.webp,yes
+cutlet-10,Котлета по-пожарски,Pozharsky Cutlet,A tender chicken cutlet in a crispy breading.,public/images/dishes/cutlet-10.webp,yes
+chicken-kiev-286,Котлета по-киевски,Chicken Kiev,"Chicken fillet with butter inside, fried in a crispy breading.",public/images/dishes/chicken-kiev-286.webp,yes
+homemade-meatballs-292,Тефтели по-домашнему,Homemade Meatballs,Meatballs in sauce with mashed potatoes or grain.,public/images/dishes/homemade-meatballs-292.webp,yes
+stroganoff-14,Бефстроганов,Beef Stroganoff,Strips of beef in a creamy sour-cream sauce.,public/images/dishes/stroganoff-14.webp,yes
+golubtsy-06,Голубцы,Golubtsy,"Cabbage leaves stuffed with meat and rice, braised in sauce.",public/images/dishes/golubtsy-06.webp,yes
+home-style-roast-288,Жаркое по-домашнему,Home-Style Roast,Meat seared and braised with potatoes and onion.,public/images/dishes/home-style-roast-288.webp,yes
+french-style-meat-293,Мясо по-французски,Meat à la Française,"Meat baked with onion, tomatoes, and cheese.",public/images/dishes/french-style-meat-293.webp,yes
+kupaty-289,Купаты,Kupaty,Juicy grilled meat sausages.,public/images/dishes/kupaty-289.webp,yes
+navy-style-pasta-287,Макароны по-флотски,Navy-Style Pasta,Pasta with sautéed ground meat and onion.,public/images/dishes/navy-style-pasta-287.webp,yes
+olivier-277,Оливье,Olivier Salad,"A salad with potatoes, vegetables, egg, meat, and mayonnaise.",public/images/dishes/olivier-277.webp,yes
+herring-under-fur-coat-285,Сельдь под шубой,Herring Under a Fur Coat,"A layered salad of herring, potatoes, carrots, beets, egg, and mayonnaise.",public/images/dishes/herring-under-fur-coat-285.webp,yes
+vinaigrette-291,Винегрет,Vinaigrette Salad,"A salad of beets, potatoes, carrots, and pickles with vegetable oil.",public/images/dishes/vinaigrette-291.webp,yes
+sauerkraut-salad-294,Салат из квашеной капусты,Sauerkraut Salad,Sauerkraut with onion and vegetable oil.,public/images/dishes/sauerkraut-salad-294.webp,yes
+herring-potatoes-276,Сельдь с картофелем,Herring with Potatoes,"Herring with boiled potatoes, onion, and oil.",public/images/dishes/herring-potatoes-276.webp,yes
+kholodets-08,Холодец,Kholodets,A set meat aspic with pieces of meat.,public/images/dishes/kholodets-08.webp,yes
+buckwheat-09,Гречневая каша,Buckwheat Porridge,Fluffy buckwheat porridge with butter.,public/images/dishes/buckwheat-09.webp,yes
+medovik-282,Медовик,Medovik,A layered honey cake with delicate sour-cream frosting.,public/images/dishes/medovik-282.webp,yes
+napoleon-283,Наполеон,Napoleon Cake,A layered puff-pastry cake with custard cream.,public/images/dishes/napoleon-283.webp,yes
+smetannik-284,Сметанник,Smetannik,A soft sponge cake with sour-cream frosting.,public/images/dishes/smetannik-284.webp,yes
+cheeseburger-401,Чизбургер,Cheeseburger,"A beef patty, cheddar cheese, pickles, onion, and sauces in a bun.",public/images/dishes/cheeseburger-401.webp,yes
+double-cheeseburger-402,Двойной чизбургер,Double Cheeseburger,"Two beef patties, two slices of cheddar, pickles, and sauces in a bun.",public/images/dishes/double-cheeseburger-402.webp,yes
+chicken-burger-403,Чикенбургер,Chicken Burger,Crispy breaded chicken fillet with lettuce and sauce in a bun.,public/images/dishes/chicken-burger-403.webp,yes
+spicy-chicken-burger-404,Острый чикенбургер,Spicy Chicken Burger,Spicy breaded chicken fillet with lettuce and zesty sauce in a bun.,public/images/dishes/spicy-chicken-burger-404.webp,yes
+bacon-burger-405,Бургер с говяжьим беконом,Beef Bacon Burger,"A beef patty, crispy beef bacon, cheddar, vegetables, and barbecue sauce.",public/images/dishes/bacon-burger-405.webp,yes
+egg-burger-406,Бургер с яйцом,Egg Burger,"A beef patty with a fried egg, cheese, vegetables, and sauce in a bun.",public/images/dishes/egg-burger-406.webp,yes
+mushroom-burger-407,Бургер с грибами,Mushroom Burger,"A beef patty with sautéed mushrooms, cheese, and a creamy sauce.",public/images/dishes/mushroom-burger-407.webp,yes
+chicken-roll-408,Куриный ролл,Chicken Roll,"A tortilla with crispy breaded chicken, fresh vegetables, and sauce.",public/images/dishes/chicken-roll-408.webp,yes
+hashbrown-roll-409,Ролл с курицей и хашбрауном,Chicken and Hashbrown Roll,"A tortilla with breaded chicken, a hash brown, cheese, and sauce.",public/images/dishes/hashbrown-roll-409.webp,yes
+chicken-lavash-410,Лаваш с курицей,Chicken Lavash,"Grilled chicken with vegetables, french fries, and sauce in thin lavash.",public/images/dishes/chicken-lavash-410.webp,yes
+cheese-lavash-411,Сырный лаваш,Cheese Lavash,"Meat with vegetables, sauce, and melted cheese in toasted lavash.",public/images/dishes/cheese-lavash-411.webp,yes
+french-hot-dog-412,Французский хот-дог,French Hot Dog,A hot baguette with a sausage inside and sauce.,public/images/dishes/french-hot-dog-412.webp,yes
+sausage-roll-413,Сосиска в тесте,Sausage Roll,A sausage baked in yeast dough.,public/images/dishes/sausage-roll-413.webp,yes
+doner-bread-414,Донер в хлебе,Döner in Bread,Döner meat with vegetables and sauce in crispy Turkish bread.,public/images/dishes/doner-bread-414.webp,yes
+grilled-chicken-sandwich-415,Сэндвич с курицей гриль,Grilled Chicken Sandwich,"Grilled chicken with vegetables, cheese, and sauce in toasted bread.",public/images/dishes/grilled-chicken-sandwich-415.webp,yes
+chicken-quesadilla-416,Кесадилья с курицей,Chicken Quesadilla,"A toasted tortilla with chicken, cheese, pepper, and sauce.",public/images/dishes/chicken-quesadilla-416.webp,yes
+chicken-doner-plate-417,Донер-микс с курицей,Chicken Döner Mix,"Chicken döner with french fries, vegetables, and sauce on a plate.",public/images/dishes/chicken-doner-plate-417.webp,yes
+doner-fries-418,Картофель фри с донером,Fries with Döner,"French fries with döner meat, sauce, and cheese.",public/images/dishes/doner-fries-418.webp,yes
+ukha-419,Уха,Ukha,"A clear fish soup with potatoes, carrots, and herbs.",public/images/dishes/ukha-419.webp,yes
+rassolnik-420,Рассольник,Rassolnik,"A soup with pickles, pearl barley, potatoes, and meat.",public/images/dishes/rassolnik-420.webp,yes
+pea-soup-421,Гороховый суп,Pea Soup,A thick pea soup with smoked meats and potatoes.,public/images/dishes/pea-soup-421.webp,yes
+svekolnik-422,Свекольник,Svekolnik,"A cold beet soup with cucumber, egg, herbs, and sour cream.",public/images/dishes/svekolnik-422.webp,yes
+goulash-423,Гуляш,Goulash,Braised beef in a thick gravy with a side.,public/images/dishes/goulash-423.webp,yes
+fried-potatoes-mushrooms-424,Жареная картошка с грибами,Fried Potatoes with Mushrooms,Potatoes sautéed with mushrooms and onion.,public/images/dishes/fried-potatoes-mushrooms-424.webp,yes
+puree-sausages-425,Пюре с сосисками,Mashed Potatoes with Sausages,Mashed potatoes with butter and boiled sausages.,public/images/dishes/puree-sausages-425.webp,yes
+home-cutlets-426,Домашние котлеты с пюре,Homemade Cutlets with Mash,Ground beef cutlets with mashed potatoes.,public/images/dishes/home-cutlets-426.webp,yes
+stuffed-peppers-427,Фаршированный перец,Stuffed Peppers,"Bell peppers with meat and rice, braised in tomato sauce.",public/images/dishes/stuffed-peppers-427.webp,yes
+liver-stroganoff-428,Печень по-строгановски,Liver Stroganoff,Beef liver braised in a sour-cream sauce with onion.,public/images/dishes/liver-stroganoff-428.webp,yes
+potato-casserole-429,Картофельная запеканка с мясом,Potato Casserole with Meat,Baked mashed potatoes with ground meat and a cheese crust.,public/images/dishes/potato-casserole-429.webp,yes
+fried-pelmeni-430,Жареные пельмени,Fried Pelmeni,"Pelmeni fried until golden-brown, with sour cream.",public/images/dishes/fried-pelmeni-430.webp,yes
+meat-blini-431,Блины с мясом,Blini with Meat,Thin pancakes filled with sautéed ground meat.,public/images/dishes/meat-blini-431.webp,yes
+tom-yum-432,Том ям,Tom Yum,"A spicy Thai soup with shrimp, mushrooms, lemongrass, and coconut milk.",public/images/dishes/tom-yum-432.webp,yes
+pad-thai-433,Пад тай,Pad Thai,"Stir-fried rice noodles with chicken, egg, bean sprouts, and peanuts.",public/images/dishes/pad-thai-433.webp,yes
+pho-bo-434,Фо бо,Phở Bò,"A Vietnamese soup with rice noodles, beef, and fresh herbs.",public/images/dishes/pho-bo-434.webp,yes
+bibimbap-435,Бибимбап,Bibimbap,"Rice with vegetables, beef, egg, and spicy gochujang paste.",public/images/dishes/bibimbap-435.webp,yes
+kuksi-436,Кукси,Kuksi,"Cold noodles in a sweet-and-sour broth with beef, cucumber, and egg.",public/images/dishes/kuksi-436.webp,yes
+bulgogi-437,Пулькоги,Bulgogi,"Marinated beef stir-fried with onion, served with rice.",public/images/dishes/bulgogi-437.webp,yes
+kimchi-stew-438,Кимчи-чиге,Kimchi Jjigae,"A spicy kimchi stew with meat and tofu, served with rice.",public/images/dishes/kimchi-stew-438.webp,yes
+chicken-udon-439,Удон с курицей,Chicken Udon,Thick wheat noodles stir-fried with chicken and vegetables in teriyaki sauce.,public/images/dishes/chicken-udon-439.webp,yes
+sweet-sour-chicken-440,Курица в кисло-сладком соусе,Sweet and Sour Chicken,Battered chicken pieces with pepper and pineapple in sweet-and-sour sauce.,public/images/dishes/sweet-sour-chicken-440.webp,yes
+guobaorou-441,Гобаожоу,Guobaorou,Crispy battered beef in a Chinese sweet-and-sour sauce.,public/images/dishes/guobaorou-441.webp,yes
+kung-pao-chicken-442,Курица гунбао,Kung Pao Chicken,"Chicken stir-fried in a wok with peanuts, chili peppers, and vegetables.",public/images/dishes/kung-pao-chicken-442.webp,yes
+mapo-tofu-443,Мапо тофу,Mapo Tofu,Tofu in a spicy sauce with ground meat and Sichuan pepper.,public/images/dishes/mapo-tofu-443.webp,yes
+wok-noodles-chicken-444,Лапша вок с курицей,Wok Noodles with Chicken,"Egg noodles stir-fried in a wok with chicken, vegetables, and soy sauce.",public/images/dishes/wok-noodles-chicken-444.webp,yes
+chicken-katsu-445,Куриный кацу с рисом,Chicken Katsu with Rice,"Panko-breaded chicken fillet with rice, cabbage, and sauce.",public/images/dishes/chicken-katsu-445.webp,yes
+oyakodon-446,Оякодон,Oyakodon,Rice topped with chicken and egg simmered in a sweet dashi sauce.,public/images/dishes/oyakodon-446.webp,yes
+california-roll-447,Ролл Калифорния,California Roll,"A roll with crab, avocado, cucumber, and masago caviar.",public/images/dishes/california-roll-447.webp,yes
+salmon-poke-448,Поке с лососем,Salmon Poke,"Rice with raw salmon, avocado, edamame, cucumber, and sauce.",public/images/dishes/salmon-poke-448.webp,yes
+pyanse-449,Пянсе,Pyanse,"Korean steamed buns with meat, cabbage, and a spicy dressing.",public/images/dishes/pyanse-449.webp,yes
+cheesecake-450,Чизкейк Нью-Йорк,New York Cheesecake,A dense creamy cheesecake on a shortbread crust.,public/images/dishes/cheesecake-450.webp,yes
+panna-cotta-451,Панна-котта,Panna Cotta,A delicate creamy dessert with berry sauce.,public/images/dishes/panna-cotta-451.webp,yes
+eclair-452,Эклер,Éclair,A choux pastry with cream filling and chocolate glaze.,public/images/dishes/eclair-452.webp,yes
+profiteroles-453,Профитроли,Profiteroles,Small choux pastry balls with cream under chocolate sauce.,public/images/dishes/profiteroles-453.webp,yes
+apple-strudel-454,Яблочный штрудель,Apple Strudel,"Thin pastry with apples and cinnamon, served warm with ice cream.",public/images/dishes/apple-strudel-454.webp,yes
+chocolate-fondant-455,Шоколадный фондан,Chocolate Fondant,A warm chocolate cake with a molten center and a scoop of ice cream.,public/images/dishes/chocolate-fondant-455.webp,yes
+belgian-waffles-456,Бельгийские вафли,Belgian Waffles,"Crispy waffles with berries, syrup, and ice cream.",public/images/dishes/belgian-waffles-456.webp,yes
+praga-cake-457,Торт «Прага»,Praga Cake,A chocolate sponge cake with chocolate cream and glaze.,public/images/dishes/praga-cake-457.webp,yes
+bird-milk-458,Птичье молоко,Bird's Milk Cake,A light soufflé on a thin sponge base under chocolate glaze.,public/images/dishes/bird-milk-458.webp,yes
+kartoshka-459,Пирожное «Картошка»,"""Kartoshka"" Pastry",A pastry of sponge-cake crumbs with cocoa and buttercream.,public/images/dishes/kartoshka-459.webp,yes
+condensed-milk-tube-460,Трубочка со сгущёнкой,Condensed Milk Wafer Tube,A crispy wafer tube with a boiled condensed milk cream.,public/images/dishes/condensed-milk-tube-460.webp,yes
+blini-condensed-461,Блины со сгущёнкой,Blini with Condensed Milk,Thin pancakes with condensed milk.,public/images/dishes/blini-condensed-461.webp,yes
+cherry-vareniki-462,Вареники с вишней,Cherry Vareniki,"Vareniki with cherries, served with sour cream and sugar.",public/images/dishes/cherry-vareniki-462.webp,yes
+plombir-463,Пломбир,Plombir Ice Cream,Classic creamy ice cream.,public/images/dishes/plombir-463.webp,yes
+chak-chak-464,Чак-чак,Chak-Chak,Fried pieces of dough in honey syrup.,public/images/dishes/chak-chak-464.webp,yes
+nishalda-465,Нишалда,Nishalda,A fluffy whipped egg-white sweet on sugar syrup with licorice root.,public/images/dishes/nishalda-465.webp,yes
+halva-466,Кунжутная халва,Sesame Halva,A dense Eastern sweet made from sesame paste and sugar.,public/images/dishes/halva-466.webp,yes
+kunefe-467,Кюнефе,Künefe,A hot dessert of kadayif pastry with cheese in syrup and pistachios.,public/images/dishes/kunefe-467.webp,yes
+sutlac-468,Сютлач,Sütlaç,A Turkish baked rice pudding with milk and cinnamon.,public/images/dishes/sutlac-468.webp,yes
+turkish-ice-cream-469,Турецкое мороженое,Turkish Ice Cream,"Stretchy maras ice cream made with salep, often with pistachios.",public/images/dishes/turkish-ice-cream-469.webp,yes
