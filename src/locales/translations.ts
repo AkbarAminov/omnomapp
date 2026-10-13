@@ -46,7 +46,7 @@ const ru = {
   result_no_exact:    'Точного совпадения нет',
   tab_all_cuisines:   'Все кухни',
   btn_nearby:         'Что рядом?',
-  btn_retry:          'Пройти заново',
+  btn_retry:          'Заново?',
   btn_all_results:    'Все варианты',
   btn_back:           'Назад',
   result_feedback_q:      'Угадали?',
