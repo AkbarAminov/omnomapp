@@ -3,12 +3,9 @@
 @tailwind utilities;
 
 :root {
-  /* Overwritten from main.tsx once Telegram reports safeAreaInset/contentSafeAreaInset
-     in fullscreen mode; 0 outside Telegram or before that fires. */
-  --tg-safe-top: 0px;
   /* Overwritten from main.tsx with Telegram's own viewportStableHeight/viewportHeight —
-     100dvh inside their WebView doesn't reliably track the real visible height, especially
-     in fullscreen, and leaves a stray scrollable gap. Falls back to 100dvh outside Telegram. */
+     100dvh inside their WebView doesn't reliably track the real visible height on phones,
+     and leaves a stray scrollable gap. Falls back to 100dvh outside Telegram. */
   --tg-vh: 100dvh;
 }
 
@@ -21,14 +18,32 @@
 html, body {
   overflow-x: hidden;
   height: 100%;
+  background-color: #FFF1DC;
   /* Без этого WebKit всё равно тянет резиновый скролл всей страницы на вертикальном свайпе,
      даже когда ни один элемент фактически не переполнен. */
   overscroll-behavior-y: none;
 }
 
 body {
-  background-color: #FFF1DC;
   font-family: 'Inter', sans-serif;
+}
+
+/* Desktop-клиенты Telegram (macos/tdesktop/web) открывают Mini App в обычном окне браузера/
+   WebView без мобильных размеров — без ограничения ширины макет растягивается на весь экран.
+   .omnom-shell (корневой контейнер в App.tsx) держит мобильную ширину по центру; на достаточно
+   широком экране ещё и читается отдельным «окном» на фоне страницы. */
+.omnom-shell {
+  /* position:fixed у обычных (не портальных) потомков — например, у Toast — иначе центрируется
+     по окну браузера, а не по этой колонке. transform на самом контейнере делает его containing
+     block для них по спецификации CSS, без единой правки в самих потомках. Оверлеи, ушедшие
+     через createPortal в document.body, этим не затронуты — для них ширина задана им самим явно. */
+  transform: translateZ(0);
+}
+@media (min-width: 500px) {
+  .omnom-shell {
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(66, 24, 8, 0.18);
+  }
 }
 
 #root {

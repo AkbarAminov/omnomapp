@@ -1688,7 +1688,8 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
   return createPortal(
     <div
       style={{
-        position: 'fixed', inset: 0, width: '100vw', height: 'var(--tg-vh, 100dvh)', zIndex: 110,
+        position: 'fixed', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
+        width: '100%', maxWidth: '440px', height: 'var(--tg-vh, 100dvh)', zIndex: 110,
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
         backgroundColor: 'rgba(66, 24, 8, 0.55)',
         animation: `battleOverlayIn 220ms ${EASE_OUT} both`,
@@ -2116,14 +2117,15 @@ export function AppOnboarding({ onDone }: { onDone(): void }) {
 
   return createPortal(
     <div style={{
-      position: 'fixed', inset: 0, width: '100vw', height: 'var(--tg-vh, 100dvh)', zIndex: 120,
+      position: 'fixed', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
+      width: '100%', maxWidth: '440px', height: 'var(--tg-vh, 100dvh)', zIndex: 120,
       backgroundColor: '#F48924',
       opacity: leaving ? 0 : 1,
       transition: `opacity 260ms ${EASE_IN}`,
       animation: `battleOverlayIn 260ms ${EASE_OUT} both`,
       display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: `calc(clamp(16px, 3dvh, 24px) + var(--tg-safe-top, 0px)) ${PAD} 0`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: `clamp(16px, 3dvh, 24px) ${PAD} 0`, flexShrink: 0 }}>
         <button
           type="button"
           onClick={dismiss}
@@ -2224,6 +2226,9 @@ function BattleOnboarding({ spotlight, onDone }: { spotlight: DOMRect | null; on
   const pad = 10;
   const scrim = 'rgba(66, 24, 8, 0.72)';
 
+  // Оставлено на полную ширину окна (не как остальные fixed-оверлеи, ограниченные .omnom-shell):
+  // spotlight ниже считается через getBoundingClientRect() настоящих карточек на экране, то есть
+  // координаты уже во viewport, а не в системе отсчёта этого контейнера — сдвигать его не на чем.
   return createPortal(
     <div style={{
       position: 'fixed', inset: 0, width: '100vw', height: 'var(--tg-vh, 100dvh)', zIndex: 100,
@@ -2726,7 +2731,8 @@ function ConfirmSheet({ title, subtitle, confirmLabel, cancelLabel, onConfirm, o
     <div
       onClick={onCancel}
       style={{
-        position: 'fixed', inset: 0, width: '100vw', height: 'var(--tg-vh, 100dvh)', zIndex: 110,
+        position: 'fixed', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
+        width: '100%', maxWidth: '440px', height: 'var(--tg-vh, 100dvh)', zIndex: 110,
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
         backgroundColor: 'rgba(66, 24, 8, 0.55)',
         animation: `battleOverlayIn 220ms ${EASE_OUT} both`,
