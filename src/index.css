@@ -6,6 +6,10 @@
   /* Overwritten from main.tsx once Telegram reports safeAreaInset/contentSafeAreaInset
      in fullscreen mode; 0 outside Telegram or before that fires. */
   --tg-safe-top: 0px;
+  /* Overwritten from main.tsx with Telegram's own viewportStableHeight/viewportHeight —
+     100dvh inside their WebView doesn't reliably track the real visible height, especially
+     in fullscreen, and leaves a stray scrollable gap. Falls back to 100dvh outside Telegram. */
+  --tg-vh: 100dvh;
 }
 
 * {

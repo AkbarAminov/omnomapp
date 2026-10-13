@@ -20,6 +20,8 @@ declare global {
         disableVerticalSwipes?(): void;
         safeAreaInset?: { top: number; bottom: number; left: number; right: number };
         contentSafeAreaInset?: { top: number; bottom: number; left: number; right: number };
+        viewportHeight?: number;
+        viewportStableHeight?: number;
         onEvent?(eventType: string, callback: () => void): void;
         openTelegramLink(url: string): void;
         openLink(url: string, options?: { try_instant_view?: boolean }): void;
@@ -55,6 +57,19 @@ function Root() {
     if (tg) {
       tg.ready();
       tg.expand();
+      // 100dvh внутри WebView Telegram ненадёжен — особенно в фуллскрине он не всегда
+      // пересчитывается синхронно с реальной высотой, из-за чего контейнер экрана оказывается
+      // на несколько пикселей выше или ниже настоящего viewport: появляется лишний скролл
+      // (пустота под кнопками) там, где экран задуман нескроллящимся. viewportHeight Telegram
+      // шлёт сам и обновляет событием — это канонический способ для Mini Apps, не полагающийся
+      // на dvh вообще. Используется как переменная с запасным 100dvh вне Telegram.
+      const syncViewportHeight = () => {
+        const h = tg.viewportStableHeight ?? tg.viewportHeight;
+        if (h) document.documentElement.style.setProperty('--tg-vh', `${h}px`);
+      };
+      syncViewportHeight();
+      [150, 350, 700, 1200].forEach((ms) => setTimeout(syncViewportHeight, ms));
+      tg.onEvent?.('viewportChanged', syncViewportHeight);
       // Полноэкранный режим (Bot API 8.0+) убирает нативную шапку Telegram («Закрыть /
       // OmNom / ⋯»); контент тогда рисуется прямо под системным статус-баром. safeAreaInset —
       // вырез/home-indicator устройства, contentSafeAreaInset — место под собственные плавающие
