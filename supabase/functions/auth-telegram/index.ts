@@ -24,7 +24,10 @@ const MAX_AUTH_AGE_SECONDS = 24 * 60 * 60;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'content-type',
+  // supabase-js всегда добавляет authorization/apikey/x-client-info к вызову functions.invoke(),
+  // даже для анонимного клиента — без них в Allow-Headers браузер молча режет сам запрос на
+  // preflight, а fetch() в клиенте видит это как "Failed to send a request", без статуса.
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
