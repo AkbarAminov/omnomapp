@@ -2139,7 +2139,7 @@ export function AppOnboarding({ onDone }: { onDone(): void }) {
       animation: `battleOverlayIn 260ms ${EASE_OUT} both`,
       display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: `clamp(16px, 3dvh, 24px) ${PAD} 0`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: `calc(clamp(16px, 3dvh, 24px) + var(--tg-safe-top, 0px)) ${PAD} 0`, flexShrink: 0 }}>
         <button
           type="button"
           onClick={dismiss}

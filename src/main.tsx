@@ -16,6 +16,10 @@ declare global {
         platform: string;
         themeParams: Record<string, string>;
         disableVerticalSwipes?(): void;
+        isVersionAtLeast?(version: string): boolean;
+        requestFullscreen?(): void;
+        safeAreaInset?: { top: number; bottom: number; left: number; right: number };
+        contentSafeAreaInset?: { top: number; bottom: number; left: number; right: number };
         viewportHeight?: number;
         viewportStableHeight?: number;
         onEvent?(eventType: string, callback: () => void): void;
@@ -52,13 +56,34 @@ function Root() {
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.ready();
-      // expand()/disableVerticalSwipes() — только телефон. На десктопе (macos/tdesktop/web)
-      // приложение рисуется как компактное окно внутри страницы, а не растянутая вкладка:
-      // раздувать его на весь экран или трогать свайпы там не нужно и нечему мешать.
-      // requestFullscreen() сознательно нигде не вызывается — отказались от него.
+      // expand()/disableVerticalSwipes()/requestFullscreen() — только телефон. На десктопе
+      // (macos/tdesktop/web) приложение рисуется как компактное окно внутри страницы, а не
+      // растянутая вкладка: раздувать его на весь экран там не нужно и нечему мешать.
       if (tg.platform === 'ios' || tg.platform === 'android') {
         tg.expand();
         tg.disableVerticalSwipes?.();
+        // Полноэкранный режим (Bot API 8.0+) убирает нативную шапку Telegram («Закрыть /
+        // OmNom / ⋯»); контент тогда рисуется прямо под системным статус-баром. safeAreaInset —
+        // вырез/home-indicator устройства, contentSafeAreaInset — место под собственные плавающие
+        // элементы Telegram поверх фуллскрина. CSS env(safe-area-inset-*) внутри их WebView в этом
+        // режиме не отражает то же самое, поэтому Telegram отдаёт оба числом и шлёт события при
+        // их изменении — переносим в CSS-переменную, которую читают верхние отступы экранов.
+        if (tg.isVersionAtLeast?.('8.0')) {
+          tg.requestFullscreen?.();
+          const syncSafeArea = () => {
+            const top = (tg.safeAreaInset?.top ?? 0) + (tg.contentSafeAreaInset?.top ?? 0);
+            document.documentElement.style.setProperty('--tg-safe-top', `${top}px`);
+          };
+          // requestFullscreen() — переход анимированный и асинхронный; сразу после вызова
+          // safeAreaInset/contentSafeAreaInset ещё могут быть нулями. Опрашиваем несколько раз
+          // первую секунду, а не только по событиям — contentSafeAreaInset на практике не всегда
+          // шлёт contentSafeAreaChanged вовремя.
+          syncSafeArea();
+          [150, 350, 700, 1200].forEach((ms) => setTimeout(syncSafeArea, ms));
+          tg.onEvent?.('safeAreaChanged', syncSafeArea);
+          tg.onEvent?.('contentSafeAreaChanged', syncSafeArea);
+          tg.onEvent?.('fullscreenChanged', syncSafeArea);
+        }
       }
       // 100dvh внутри WebView Telegram ненадёжен — особенно на телефоне он не всегда
       // пересчитывается синхронно с реальной высотой, из-за чего контейнер экрана оказывается

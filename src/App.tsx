@@ -541,6 +541,7 @@ function OmNomApp() {
       width: '100%', maxWidth: '768px', margin: '0 auto',
       position: 'relative', display: 'flex', flexDirection: 'column',
       height: 'var(--tg-vh, 100dvh)', minHeight: 'var(--tg-vh, 100dvh)',
+      paddingTop: 'var(--tg-safe-top, 0px)',
       overflow: 'hidden', backgroundColor: '#FFF1DC',
     }}>
       {/* key re-mounts on screen change → screenFadeIn; the quiz keeps one key between questions */}

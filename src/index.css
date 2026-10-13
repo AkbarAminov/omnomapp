@@ -7,6 +7,9 @@
      100dvh inside their WebView doesn't reliably track the real visible height on phones,
      and leaves a stray scrollable gap. Falls back to 100dvh outside Telegram. */
   --tg-vh: 100dvh;
+  /* Overwritten from main.tsx once Telegram reports safeAreaInset/contentSafeAreaInset in
+     fullscreen mode (phones only); 0 outside Telegram, on desktop, or before that fires. */
+  --tg-safe-top: 0px;
 }
 
 * {
