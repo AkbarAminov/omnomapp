@@ -8,14 +8,14 @@ export const PUBLIC_DIR = path.join(import.meta.dirname, '..', '..', 'public');
 
 // Existing character illustrations, reused for questions with the same meaning.
 export const QUESTION_IMAGES: Record<string, string> = {
-  q_m_heavy: '/assets/char-meal.png',
-  q_m_meat: '/assets/char-meat.png',
-  q_m_hot: '/assets/char-hot.png',
-  q_m_soup: '/assets/char-soup.png',
-  q_m_fast: '/assets/char-fast.png',
-  q_s_heavy: '/assets/char-meal.png',
-  q_s_hot: '/assets/char-hot.png',
-  q_s_meat: '/assets/char-meat.png',
+  q_m_heavy: '/assets/char-meal.webp',
+  q_m_meat: '/assets/char-meat.webp',
+  q_m_hot: '/assets/char-hot.webp',
+  q_m_soup: '/assets/char-soup.webp',
+  q_m_fast: '/assets/char-fast.webp',
+  q_s_heavy: '/assets/char-meal.webp',
+  q_s_hot: '/assets/char-hot.webp',
+  q_s_meat: '/assets/char-meat.webp',
 };
 
 export type ImageKind = 'dishes' | 'questions';

@@ -385,7 +385,7 @@ export function AppLoadingScreen() {
         }}
       />
       <img
-        src="/assets/char-loading.png"
+        src="/assets/char-loading.webp"
         alt=""
         style={{ width: 'min(clamp(160px, 56vw, 260px), 32dvh)', objectFit: 'contain' }}
         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -464,7 +464,7 @@ export function StartScreen({ onStart, onRandomizer }: { onStart(): void; onRand
             overflow: 'hidden'
           }}
         >
-          <img src="/assets/char-start.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <img src="/assets/char-start.webp" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
 
         <h1 style={{
@@ -1120,7 +1120,7 @@ export function LoadingScreen({ progress }: { progress: number }) {
         overflow: 'hidden',
       }}>
         <img
-          src="/assets/char-loading.png"
+          src="/assets/char-loading.webp"
           alt=""
           // Персонаж — главный элемент состояния: берёт всю доступную ширину и высоту,
           // пропорции не трогаем.
@@ -2614,7 +2614,7 @@ export function HistoryScreen({ history, dishById, onClearHistory }: {
         {header}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: '20px', padding: PAD, paddingTop: 'clamp(8px, 2dvh, 20px)' }}>
           <img
-            src="/assets/char-history.png"
+            src="/assets/char-history.webp"
             alt=""
             style={{ width: 'clamp(224px, 80%, 308px)', objectFit: 'contain' }}
             onError={(e) => {
