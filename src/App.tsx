@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppErrorScreen,
   AppLoadingScreen,
+  AppOnboarding,
   BottomNav,
   CuisineSelectionScreen,
   HistoryScreen,
@@ -39,8 +40,9 @@ import {
 import { flush as flushEvents, track } from './logic/analytics';
 import { AppData, loadData } from './logic/dataStore';
 import { clearHistory, formatDate, HistoryItem, HistoryMode, loadHistory, saveHistoryItem } from './logic/historyStorage';
+import { trackEvent } from './logic/metrics';
 import { buildSessionRows, newSessionId, saveSessionAnswers } from './logic/sessionAnswers';
-import { loadSettings } from './logic/settingsStorage';
+import { isAppOnboardingSeen, loadSettings, markAppOnboardingSeen } from './logic/settingsStorage';
 import { LangProvider } from './locales/LangContext';
 
 export type FlowScreen = 'start' | 'mode' | 'cuisine' | 'question' | 'loading' | 'single-result' | 'results' | 'no-results';
@@ -86,12 +88,14 @@ function OmNomApp() {
   // null — ограничения ещё не прочитаны: «Или / Или» стартует сразу при открытии вкладки,
   // и собирать первую пару до этого нельзя.
   const [battleAllergens, setBattleAllergens] = useState<string[] | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const quizRef = useRef<QuizView | null>(null);
   const finalizedRef = useRef<Session | null>(null);
   // Created when the quiz starts, not when it ends, so abandoned sessions are identifiable too.
   const quizIdRef = useRef<string | null>(null);
   const quizStartedAtRef = useRef(0);
+  const questionShownAtRef = useRef(0);
   const pendingAnswersRef = useRef<{ id: string; session: Session; guessedDishId: string } | null>(null);
   const rejectedIdsRef = useRef<string[]>([]);
   const nearEndRef = useRef(false);
@@ -110,15 +114,17 @@ function OmNomApp() {
       const [appData, historyItems] = await Promise.all([loadData(), loadHistory()]);
       setHistory(historyItems);
       setData(appData);
+      isAppOnboardingSeen().then((seen) => { if (!seen) setShowOnboarding(true); });
     } catch (e) {
       console.error('[OmNom] data load failed:', e);
       setDataError(true);
+      trackEvent('error', { message: String(e), screen: 'app-loading' });
     }
   }, []);
 
   useEffect(() => { initApp(); }, [initApp]);
 
-  const addToHistory = (dish: Dish, mode: HistoryMode, matchPercent: number | null) => {
+  const addToHistory = (dish: Dish, mode: HistoryMode, matchPercent: number | null, rank: number | null = null) => {
     const item: HistoryItem = {
       id: `${dish.id}_${Date.now()}`,
       dishId: dish.id,
@@ -130,6 +136,7 @@ function OmNomApp() {
     };
     setHistory((prev) => [item, ...prev].slice(0, 50));
     saveHistoryItem(dish, mode, matchPercent);
+    trackEvent('dish_selected', { dish_id: dish.id, rank });
   };
 
   const setQuizView = (view: QuizView | null) => {
@@ -222,6 +229,10 @@ function OmNomApp() {
       dish_id: top[0].id,
       props: { pct: top[0].matchPercent, count: top.length, exact: own.exact },
     });
+    trackEvent('results_shown', {
+      dish_ids: top.map((d) => d.id),
+      match_percents: top.map((d) => d.matchPercent),
+    });
     const all = session.mode === 'meal' && session.cuisine !== ANY_CUISINE
       ? allCuisinesResults(data!.dishes, session.log, allergensRef.current, RESULT_COUNT).dishes
       : [];
@@ -230,7 +241,7 @@ function OmNomApp() {
     setExactMatch(own.exact);
     setAllCuisineResults(all.length > 0 ? all : null);
     pendingAnswersRef.current = { id: sessionId ?? newSessionId(), session, guessedDishId: top[0].id };
-    addToHistory(top[0], session.mode, top[0].matchPercent);
+    addToHistory(top[0], session.mode, top[0].matchPercent, 1);
     runLoading();
   };
 
@@ -272,6 +283,8 @@ function OmNomApp() {
       question_index: session.swipes + 1,
       props: { tag: question.tag, candidates: session.candidates.length },
     });
+    questionShownAtRef.current = Date.now();
+    trackEvent('question_shown', { question_id: question.id, index: session.swipes + 1 });
     // remainingEstimate не монотонный: на первом вопросе он бывает 2, а на следующем 5, потому
     // что ответ открывает вопросы, которые раньше не проходили окно информативности. Поэтому
     // подсказка только защёлкивается и не может появиться в самом начале: обещание скорого
@@ -299,6 +312,7 @@ function OmNomApp() {
       cuisine,
       props: { candidates: session.candidates.length, allergens: allergensRef.current.length },
     });
+    trackEvent('quiz_start', { mode, cuisine });
     if (session.candidates.length === 0) {
       setResults([]);
       setFlowScreen('no-results');
@@ -329,6 +343,11 @@ function OmNomApp() {
       answer,
       question_index: view.session.swipes + 1,
       props: { tag: view.question.tag },
+    });
+    trackEvent('answer_given', {
+      question_id: view.question.id,
+      answer,
+      time_ms: Date.now() - questionShownAtRef.current,
     });
     if (!nq) finalizeQuiz(next);
     else showQuestion(next, nq, view.progress);
@@ -410,6 +429,7 @@ function OmNomApp() {
         props: { source: 'quiz', pct: results[0].matchPercent },
       });
     }
+    trackEvent('restart');
     resetState();
     setFlowScreen('mode');
   };
@@ -483,6 +503,11 @@ function OmNomApp() {
           setFlowScreen('results');
         } : undefined}
         onGoHome={handleGoHome}
+        onFeedback={resultVariant === 'quiz' ? (value) => trackEvent('result_feedback', {
+          value,
+          dish_id: results[0]?.id ?? null,
+          session_id: pendingAnswersRef.current?.id ?? null,
+        }) : undefined}
       />
     );
   } else if (flowScreen === 'results') {
@@ -500,6 +525,7 @@ function OmNomApp() {
         onOpenHistory={handleOpenHistory}
         onRetry={handleRetry}
         onGoHome={handleGoHome}
+        onDishOpen={(dishId) => trackEvent('dish_opened', { dish_id: dishId })}
       />
     );
   } else if (flowScreen === 'no-results') {
@@ -540,6 +566,9 @@ function OmNomApp() {
         <BottomNav active={activeTab} onTabChange={handleTabChange} />
       </div>
 
+      {showOnboarding && (
+        <AppOnboarding onDone={() => { markAppOnboardingSeen(); setShowOnboarding(false); }} />
+      )}
     </div>
   );
 }

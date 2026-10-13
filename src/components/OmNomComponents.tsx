@@ -232,6 +232,7 @@ export function BottomNav({ active = 'home', onTabChange }: BottomNavProps) {
                 color: isActive ? '#fff' : 'rgba(61, 26, 0, 0.55)',
                 transition: 'color 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
                 maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                marginTop: '4px',
               }}>
                 {t(labelKey)}
               </span>
@@ -368,14 +369,36 @@ function PressButton({
 export function AppLoadingScreen() {
   const { t } = useLang();
   return (
-    <Screen>
-      <div className="flex flex-col items-center justify-center flex-1" style={{ gap: '20px' }}>
-        <OmNomLogo />
-        <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', opacity: 0.6, fontSize: '15px' }}>
+    <div style={{
+      minHeight: '100%', height: '100%', backgroundColor: '#F48924',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 'clamp(22px, 4dvh, 34px)',
+    }}>
+      <img
+        src="/assets/logo_horizontal.svg"
+        alt="omnom"
+        style={{
+          width: 'clamp(220px, 62vw, 320px)', height: 'auto', display: 'block',
+          animation: 'logoBreathe 2.2s ease-in-out infinite',
+        }}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '7px' }}>
+          {[0, 1, 2].map((i) => (
+            <span key={i} style={{
+              width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#fff',
+              animation: `loadingDot 1.1s ease-in-out ${i * 0.15}s infinite`,
+            }} />
+          ))}
+        </div>
+        <p style={{
+          fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#FFEEDB', opacity: 0.9,
+          fontSize: 'clamp(13px, 3.6vw, 15px)', margin: 0,
+        }}>
           {t('app_loading_text')}
         </p>
       </div>
-    </Screen>
+    </div>
   );
 }
 
@@ -409,17 +432,22 @@ export function AppErrorScreen({ onRetry }: { onRetry(): void }) {
 export function StartScreen({ onStart, onRandomizer }: { onStart(): void; onRandomizer(): void }) {
   const { t } = useLang();
   return (
-    <Screen>
+    // fill: на невысоком экране (667px и ниже) композиция иначе перерастала высоту и
+    // экран становился прокручиваемым — кнопки уезжали под край.
+    <Screen fill>
       <div
         className="flex flex-col items-center justify-center flex-1 text-center"
-        style={{ padding: `clamp(32px,8vh,60px) ${PAD} 16px`, gap: 'clamp(20px, 4vh, 32px)' }}
+        style={{ padding: `clamp(32px,8vh,60px) ${PAD} 16px`, gap: 'clamp(20px, 4vh, 32px)', minHeight: 0 }}
       >
         <OmNomLogo stacked />
 
         <div
           style={{
-            width: 'clamp(220px, 72%, 300px)',
+            // Ограничение по высоте экрана, а не только по ширине: иначе круг 72% ширины
+            // на коротком экране съедал всё место под кнопки.
+            width: 'min(clamp(220px, 72%, 300px), 34dvh)',
             aspectRatio: '1',
+            flexShrink: 0,
             borderRadius: '50%',
             backgroundColor: '#FFF1DD',
             display: 'flex',
@@ -513,12 +541,14 @@ export function CuisineSelectionScreen({
 }: { selectedId: string | null; onSelect(id: string): void; onRandom(): void }) {
   const { t } = useLang();
   return (
-    <Screen>
+    // fill: список кухонь прокручивается сам (ниже flex: 1 + overflowY), но без fill
+    // на коротком экране прокручивался весь экран целиком и логотип уезжал вверх.
+    <Screen fill>
       <div style={{ padding: `${LOGO_TOP} ${PAD} 0`, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
         <OmNomLogo />
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: `${LOGO_GAP} ${PAD} 0` }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: `${LOGO_GAP} ${PAD} 0` }}>
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(2, 1fr)',
@@ -649,8 +679,6 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwi
     el.style.transform = `translate3d(${dx}px, ${dy}px, 0) rotate(${rotate}deg)`;
     el.style.opacity = String(fade);
     const strength = Math.min(Math.abs(dx) / 110, 1);
-    // Во время подтверждения выбора заливка оранжевая — её не перебивает цвет направления.
-    if (confirming.current) return;
     for (const node of [tintRef.current, yesRef.current, noRef.current]) if (node) node.style.transition = transition ? `opacity ${transition}` : 'none';
     if (tintRef.current) {
       // Градиент со стороны свайпа: видно не только «куда», но и «насколько».
@@ -676,19 +704,18 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwi
     timer.current = setTimeout(() => onSwipe(dir), CARD_EXIT_MS);
   }, [onExitStart, onSwipe, pose]);
 
-  // Нажатие по кнопке ответа: сначала видно, что именно выбрано, и только потом карточка уходит.
+  // Нажатие по кнопке ответа: та же поза и тот же цвет, что у полностью протянутого свайпа,
+  // с короткой паузой, чтобы направление успело считаться, и только потом карточка уходит —
+  // тем же commit(), что и у настоящего отпускания пальца.
   const confirmThenCommit = useCallback((dir: SwipeDir) => {
     if (exiting.current || confirming.current) return;
     confirming.current = true;
     haptic('light');
-    const tint = tintRef.current;
-    if (tint) {
-      tint.style.transition = 'opacity 110ms ease';
-      tint.style.background = 'linear-gradient(180deg, rgba(244,137,36,0.55) 0%, rgba(244,137,36,1) 100%)';
-      tint.style.opacity = '0.4';
-    }
+    const edge = SWIPE_DISTANCE * 1.4;
+    if (dir === 'up') pose(0, -edge, '140ms ease-out');
+    else pose(dir === 'right' ? edge : -edge, 0, '140ms ease-out');
     timer.current = setTimeout(() => commit(dir), CONFIRM_HOLD_MS);
-  }, [commit]);
+  }, [commit, pose]);
 
   useImperativeHandle(ref, () => ({ swipe: confirmThenCommit }), [confirmThenCommit]);
 
@@ -866,7 +893,11 @@ export const QuestionCardScreen = memo(function QuestionCardScreen({
   }, [onAnswer]);
 
   return (
-    <Screen>
+    // fill + minHeight: 0 ниже: экран вопроса — фиксированная композиция (логотип, карточка,
+    // кнопки), он не должен прокручиваться. С min-height у карточки на невысоком экране сумма
+    // превышала высоту, экран становился прокручиваемым, логотип уезжал вверх, а под кнопками
+    // открывался пустой хвост.
+    <Screen fill>
       {/* Счётчика шагов здесь нет: движок сам решает, сколько вопросов задать, и фиксированное
           «2 / 6» обещало бы человеку то, чего система не знает. */}
       <div style={{ padding: `${LOGO_TOP} ${PAD} 0`, display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
@@ -885,7 +916,7 @@ export const QuestionCardScreen = memo(function QuestionCardScreen({
         position: 'relative',
         width: `calc(100% - ${parseInt(PAD) * 2}px)`,
         alignSelf: 'center',
-        flex: 1, minHeight: 'clamp(340px, 52dvh, 620px)',
+        flex: 1, minHeight: 0,
         marginTop: 'clamp(8px, 1.6dvh, 16px)',
         marginBottom: 'clamp(8px, 1.6dvh, 16px)',
       }}>
@@ -1129,13 +1160,15 @@ function dishTitleSize(name: string, min: number, vw: number, max: number): stri
 // Один экран результата на все источники: после теста, рандомайзера и «Или / Или».
 // Отличается только блок действий — композиция, карточка и типографика общие.
 export function SingleResultScreen({
-  dish, exact = true, onRetry, onAllResults, onGoHome, variant = 'quiz', beat = [], similar = [],
+  dish, exact = true, onRetry, onAllResults, onGoHome, variant = 'quiz', beat = [], similar = [], onFeedback,
 }: {
   dish: MatchedDish; exact?: boolean; onRetry?(): void; onAllResults?(): void; onGoHome(): void;
   variant?: 'quiz' | 'randomizer' | 'battle';
   // Кого победитель обошёл по дороге и что ещё похоже на выбранное за игру.
   beat?: readonly string[];
   similar?: readonly MatchedDish[];
+  // «Угадали?» — только у результата теста, один тап, после него уходит сама.
+  onFeedback?(value: 'up' | 'down'): void;
 }) {
   const { t, lang } = useLang();
   const dishName = lang === 'uz' ? (dish.name_uz || dish.name) : dish.name;
@@ -1143,12 +1176,21 @@ export function SingleResultScreen({
   const [toast, setToast] = useState<string | null>(null);
   const [card, setCard] = useState<Blob | null>(null);
   const [sheet, setSheet] = useState<number | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState<'up' | 'down' | null>(null);
+  const [feedbackGone, setFeedbackGone] = useState(false);
   const caption = t('share_card_caption');
+
+  const sendFeedback = (value: 'up' | 'down') => {
+    haptic('light');
+    setFeedbackSent(value);
+    onFeedback?.(value);
+    setTimeout(() => setFeedbackGone(true), 1400);
+  };
 
   // Картинка для шеринга рисуется, пока человек смотрит результат: по нажатию её
   // нужно только отдать — иначе платформа сочтёт вызов без жеста.
   useEffect(() => {
-    if (variant !== 'battle') return;
+    if (variant === 'randomizer') return;
     let alive = true;
     buildShareCard(dish, dishName, caption).then((blob) => { if (alive) setCard(blob); });
     return () => { alive = false; };
@@ -1244,6 +1286,33 @@ export function SingleResultScreen({
           }}>
             {dishDesc}
           </p>
+          {variant === 'quiz' && onFeedback && !feedbackGone && (
+            <div style={{
+              marginTop: 'clamp(10px, 1.6dvh, 16px)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', gap: '8px',
+              fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912',
+              fontSize: 'clamp(12px, 3vw, 14px)', opacity: feedbackSent ? 0.6 : 0.8,
+              transition: 'opacity 0.3s',
+            }}>
+              {feedbackSent ? (
+                <span>{t('result_feedback_thanks')}</span>
+              ) : (
+                <>
+                  <span>{t('result_feedback_q')}</span>
+                  <button
+                    type="button" onClick={() => sendFeedback('up')} aria-label="up"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '2px 5px', lineHeight: 1 }}
+                    {...usePressScale(0.88)}
+                  >👍</button>
+                  <button
+                    type="button" onClick={() => sendFeedback('down')} aria-label="down"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '2px 5px', lineHeight: 1 }}
+                    {...usePressScale(0.88)}
+                  >👎</button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1330,6 +1399,9 @@ export function SingleResultScreen({
           {variant === 'randomizer' && (
             <ActionCircle size="large" icon={<IconArrowLeft />} label={t('btn_back')} onClick={onGoHome} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
           )}
+          {variant === 'quiz' && (
+            <ActionCircle size="large" icon={<img src="/assets/icons/settings-share.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_share_result')} onClick={share} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+          )}
           {onRetry && (
             <ActionCircle size="large" icon={<img src="/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_retry')} onClick={onRetry} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
           )}
@@ -1404,11 +1476,12 @@ export function NoResultsScreen({ onRetry, onGoHome }: { onRetry(): void; onGoHo
 // ─── Screen 10 — Results list ─────────────────────────────────────────────────
 
 export function ResultsListScreen({
-  sameCuisineResults, allCuisineResults, onOpenHistory, onRetry, onGoHome, onTabChange,
+  sameCuisineResults, allCuisineResults, onOpenHistory, onRetry, onGoHome, onTabChange, onDishOpen,
 }: {
   sameCuisineResults: MatchedDish[]; allCuisineResults: MatchedDish[] | null;
   onOpenHistory(): void; onRetry(): void; onGoHome(): void;
   onTabChange?(tab: 'cuisine' | 'all'): void;
+  onDishOpen?(dishId: string): void;
 }) {
   const { t } = useLang();
   const [tab, setTab] = useState<'cuisine' | 'all'>('cuisine');
@@ -1467,7 +1540,7 @@ export function ResultsListScreen({
 
         <div style={{ padding: `0 ${PAD}`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {activeResults.map((dish, i) => (
-            <ResultCard key={dish.id} dish={dish} highlighted={i === 0} onOpen={() => setOpenIndex(i)} />
+            <ResultCard key={dish.id} dish={dish} highlighted={i === 0} onOpen={() => { setOpenIndex(i); onDishOpen?.(dish.id); }} />
           ))}
         </div>
 
@@ -1567,24 +1640,44 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
   const [toast, setToast] = useState<string | null>(null);
   const [drag, setDrag] = useState(0);
   const startX = useRef<number | null>(null);
+  const startY = useRef(0);
   const width = useRef(1);
+  // Решаем «это горизонтальный свайп или вертикальный скролл текста» по первому заметному
+  // движению и запоминаем — иначе на каждый тик приходится сравнивать dx/dy заново, и палец,
+  // слегка повело вниз, переключал бы жест туда-обратно.
+  const horizontal = useRef<boolean | null>(null);
 
   const go = (i: number) => onIndex(Math.max(0, Math.min(dishes.length - 1, i)));
 
   const onPointerDown = (e: React.PointerEvent) => {
     startX.current = e.clientX;
+    startY.current = e.clientY;
+    horizontal.current = null;
     width.current = (e.currentTarget as HTMLElement).clientWidth || 1;
+    // Без захвата указателя браузер на touch-устройстве почти всегда решает, что это
+    // вертикальный скролл (touchAction: pan-y), и до onPointerMove дело не доходит.
+    // Бросает, если указателя с таким id уже нет, — тогда просто листаем без захвата,
+    // но жест не теряем.
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (startX.current === null) return;
-    setDrag(e.clientX - startX.current);
+    const dx = e.clientX - startX.current;
+    const dy = e.clientY - startY.current;
+    if (horizontal.current === null && Math.hypot(dx, dy) > 8) horizontal.current = Math.abs(dx) > Math.abs(dy);
+    if (!horizontal.current) return;
+    // Жест уже наш — не даём странице увести его в нативный вертикальный скролл.
+    e.preventDefault();
+    setDrag(dx);
   };
   const onPointerUp = () => {
     if (startX.current === null) return;
     const moved = drag;
+    const wasHorizontal = horizontal.current;
     startX.current = null;
+    horizontal.current = null;
     setDrag(0);
-    if (Math.abs(moved) > width.current * 0.18) go(index + (moved < 0 ? 1 : -1));
+    if (wasHorizontal && Math.abs(moved) > width.current * 0.18) go(index + (moved < 0 ? 1 : -1));
   };
 
   return createPortal(
@@ -1930,6 +2023,180 @@ function BattleCard({ dish, role, onPick, onReject }: {
         </span>
       </div>
     </button>
+  );
+}
+
+// ─── Онбординг приложения (первый запуск) ────────────────────────────────────
+// Три шага, свайп тем же способом, что и DishSheet (pointer capture + preventDefault на
+// горизонтальный жест — иначе «pan-y» отдаёт его нативному вертикальному скроллу).
+
+function OnboardingVisual({ step }: { step: number }) {
+  const circle = (bg: string, content: React.ReactNode, size = 'clamp(64px, 18vw, 80px)') => (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', backgroundColor: bg,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      boxShadow: '0 10px 26px rgba(108,41,18,0.14)',
+    }}>
+      {content}
+    </div>
+  );
+  if (step === 0) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(12px, 3.5vw, 18px)' }}>
+        {circle('#fff', <img src="/assets/icons/answer-no.svg" alt="" style={{ width: '46%', height: '46%' }} />)}
+        {circle('#fff', <img src="/assets/icons/answer-any.svg" alt="" style={{ width: '50%', height: '50%' }} />, 'clamp(52px, 14.5vw, 64px)')}
+        {circle('#fff', <img src="/assets/icons/answer-yes.svg" alt="" style={{ width: '50%', height: '50%' }} />)}
+      </div>
+    );
+  }
+  if (step === 1) {
+    return circle('#fff', (
+      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#F48924', fontSize: 'clamp(22px, 6vw, 28px)' }}>92%</span>
+    ), 'clamp(104px, 28vw, 128px)');
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(16px, 4.5vw, 22px)' }}>
+      {circle('#fff', <img src="/assets/icons/nav-battle.svg" alt="" style={{ width: '46%', height: '46%' }} />)}
+      {circle('#fff', <img src="/assets/icons/nav-history.svg" alt="" style={{ width: '46%', height: '46%' }} />)}
+    </div>
+  );
+}
+
+export function AppOnboarding({ onDone }: { onDone(): void }) {
+  const { t } = useLang();
+  const STEPS = 3;
+  const [step, setStep] = useState(0);
+  const [leaving, setLeaving] = useState(false);
+  const [drag, setDrag] = useState(0);
+  const startX = useRef<number | null>(null);
+  const startY = useRef(0);
+  const width = useRef(1);
+  const horizontal = useRef<boolean | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const dismiss = () => {
+    if (leaving) return;
+    setLeaving(true);
+    timer.current = setTimeout(onDone, 260);
+  };
+  const go = (i: number) => setStep(Math.max(0, Math.min(STEPS - 1, i)));
+  const next = () => { haptic('light'); step === STEPS - 1 ? dismiss() : go(step + 1); };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    startX.current = e.clientX;
+    startY.current = e.clientY;
+    horizontal.current = null;
+    width.current = (e.currentTarget as HTMLElement).clientWidth || 1;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (startX.current === null) return;
+    const dx = e.clientX - startX.current;
+    const dy = e.clientY - startY.current;
+    if (horizontal.current === null && Math.hypot(dx, dy) > 8) horizontal.current = Math.abs(dx) > Math.abs(dy);
+    if (!horizontal.current) return;
+    e.preventDefault();
+    setDrag(dx);
+  };
+  const onPointerUp = () => {
+    if (startX.current === null) return;
+    const moved = drag;
+    const wasHorizontal = horizontal.current;
+    startX.current = null;
+    horizontal.current = null;
+    setDrag(0);
+    if (wasHorizontal && Math.abs(moved) > width.current * 0.18) go(step + (moved < 0 ? 1 : -1));
+  };
+
+  return createPortal(
+    <div style={{
+      position: 'fixed', inset: 0, width: '100vw', height: '100dvh', zIndex: 120,
+      backgroundColor: '#F48924',
+      opacity: leaving ? 0 : 1,
+      transition: `opacity 260ms ${EASE_IN}`,
+      animation: `battleOverlayIn 260ms ${EASE_OUT} both`,
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: `clamp(16px, 3dvh, 24px) ${PAD} 0`, flexShrink: 0 }}>
+        <button
+          type="button"
+          onClick={dismiss}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px',
+            fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#fff', opacity: 0.8,
+            fontSize: 'clamp(13px, 3.4vw, 15px)',
+          }}
+        >
+          {t('onboarding_skip')}
+        </button>
+      </div>
+
+      <div
+        style={{ flex: 1, minHeight: 0, overflow: 'hidden', touchAction: 'pan-y' }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <div style={{
+          display: 'flex', height: '100%',
+          transform: `translateX(calc(${-step * 100}% + ${drag}px))`,
+          transition: drag === 0 ? `transform 320ms ${EASE_OUT}` : 'none',
+        }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{
+              flex: '0 0 100%', minWidth: 0, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: 'clamp(20px, 4dvh, 32px)',
+              padding: `0 ${PAD}`, textAlign: 'center',
+            }}>
+              <OnboardingVisual step={i} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '320px' }}>
+                <h2 style={{
+                  fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff',
+                  fontSize: 'clamp(22px, 6.4vw, 28px)', lineHeight: 1.2, letterSpacing: '-0.02em', margin: 0,
+                }}>
+                  {t(`onboarding_${i + 1}_title` as TranslationKey)}
+                </h2>
+                <p style={{
+                  fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#fff', opacity: 0.86,
+                  fontSize: 'clamp(14px, 3.7vw, 16px)', lineHeight: 1.45, margin: 0,
+                }}>
+                  {t(`onboarding_${i + 1}_sub` as TranslationKey)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'clamp(18px, 3dvh, 26px)',
+        padding: `0 ${PAD} calc(clamp(20px, 3.5dvh, 32px) + env(safe-area-inset-bottom, 0px))`, flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {[0, 1, 2].map((i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`${i + 1}`}
+              onClick={() => go(i)}
+              style={{
+                width: i === step ? '22px' : '8px', height: '8px', borderRadius: '999px', border: 'none',
+                padding: 0, cursor: 'pointer', backgroundColor: i === step ? '#fff' : 'rgba(255,255,255,0.35)',
+                transition: 'width 0.3s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s',
+              }}
+            />
+          ))}
+        </div>
+        <div style={{ width: '100%', maxWidth: '360px' }}>
+          <PressButton onClick={next} bg="#fff" color="#F48924" shadow="0 14px 30px rgba(66,24,8,0.22)">
+            {step === STEPS - 1 ? t('onboarding_start') : t('onboarding_next')}
+          </PressButton>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -2292,7 +2559,7 @@ const HISTORY_MODE_KEYS: Record<HistoryMode, TranslationKey> = {
   battle: 'history_mode_battle',
 };
 
-const HISTORY_CLEAR_MIN = 3;
+const HISTORY_CLEAR_MIN = 1;
 
 export function HistoryScreen({ history, dishById, onClearHistory }: {
   history: HistoryItem[]; dishById: ReadonlyMap<string, Dish>; onClearHistory(): Promise<void>;
@@ -2375,11 +2642,11 @@ export function HistoryScreen({ history, dishById, onClearHistory }: {
                   {item.matchPercent != null && (
                     <div style={{
                       position: 'absolute', top: '8px', right: '8px',
-                      width: '44px', height: '44px', borderRadius: '100px', backgroundColor: '#F48924',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', lineHeight: 1,
+                      minWidth: '38px', height: '38px', borderRadius: '999px', backgroundColor: '#F48924',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 7px',
                     }}>
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: 'clamp(14px, 4vw, 17px)', color: '#fff' }}>{item.matchPercent}</span>
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '7px', color: '#fff', marginTop: '-2px' }}>%</span>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: 'clamp(13px, 3.6vw, 16px)', color: '#fff', lineHeight: 1 }}>{item.matchPercent}</span>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '9px', color: '#fff', lineHeight: 1, alignSelf: 'center', marginLeft: '1px' }}>%</span>
                     </div>
                   )}
                 </div>
@@ -2395,9 +2662,7 @@ export function HistoryScreen({ history, dishById, onClearHistory }: {
             );
           })}
 
-        {/* Управление историей живёт рядом с самой историей, а не в настройках профиля,
-            и по массе совпадает с карточкой результата. На одной-двух записях красная кнопка
-            весит столько же, сколько вся история, поэтому появляется с третьей. */}
+        {/* Управление историей живёт рядом с самой историей, а не в настройках профиля. */}
         {history.length >= HISTORY_CLEAR_MIN && (
         <button
           type="button"

@@ -2,6 +2,8 @@ import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
+import { initAuth } from './lib/auth';
+import { startAppSession } from './logic/metrics';
 
 declare global {
   interface Window {
@@ -11,6 +13,7 @@ declare global {
         expand(): void;
         close(): void;
         colorScheme: 'light' | 'dark';
+        platform: string;
         themeParams: Record<string, string>;
         openTelegramLink(url: string): void;
         openLink(url: string, options?: { try_instant_view?: boolean }): void;
@@ -47,6 +50,12 @@ function Root() {
       tg.ready();
       tg.expand();
     }
+    // Fire-and-forget: must not delay first render or ever surface to the UI. The session
+    // insert needs auth.uid(), so it's chained after initAuth rather than fired in parallel.
+    void initAuth().then(() => {
+      const start_param = (tg as any)?.initDataUnsafe?.start_param ?? null;
+      startAppSession(start_param, tg?.platform ?? null);
+    });
   }, []);
 
   return <App />;

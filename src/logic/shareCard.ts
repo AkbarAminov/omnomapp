@@ -127,9 +127,14 @@ export function shareBlob(blob: Blob | null, caption: string): Promise<ShareOutc
   const file = new File([blob], 'omnom.png', { type: 'image/png' });
 
   const nav = navigator as Navigator & { canShare?(data: ShareData): boolean };
-  if (nav.canShare?.({ files: [file] }) && nav.share) {
+  // canShare() сама иногда недоступна или занижает поддержку файлов в WebView (в т.ч.
+  // у Telegram), хотя сам share() с файлом там реально работает — поэтому она не ворота,
+  // а только намёк: если её нет, всё равно пробуем share() напрямую.
+  const hasShare = typeof nav.share === 'function';
+  const canShareFile = hasShare && (!nav.canShare || (() => { try { return nav.canShare!({ files: [file] }); } catch { return true; } })());
+  if (canShareFile) {
     // Вызов уходит синхронно из обработчика — иначе платформа сочтёт его без жеста.
-    return nav.share({ files: [file], text: caption })
+    return nav.share!({ files: [file], text: caption })
       .then((): ShareOutcome => 'shared')
       // Отмена пользователем — не ошибка; всё остальное отдаём запасным путём.
       .catch((e): ShareOutcome => ((e as Error)?.name === 'AbortError' ? 'shared' : fallback(blob, caption)));
@@ -137,13 +142,12 @@ export function shareBlob(blob: Blob | null, caption: string): Promise<ShareOutc
   return Promise.resolve(fallback(blob, caption));
 }
 
-// В Telegram WebView картинку часто отдать нельзя: системного share с файлом нет,
-// а скачивание молча не срабатывает. Тогда уходим штатным телеграмным шерингом
-// ссылки с подписью — пользователь всё равно может поделиться результатом.
+// Если системный share с файлом не вышел, картинка всё равно важнее текста — отдаём файл
+// на скачивание, и только если это тоже не удалось, уходим штатным телеграмным шерингом
+// ссылки с подписью (внутри Telegram это открывает диалог выбора чата, а не настоящий файл).
 function fallback(blob: Blob, caption: string): ShareOutcome {
-  const tg = (window as any).Telegram?.WebApp;
-  if (tg?.openTelegramLink) return shareLink(caption);
-  return save(blob);
+  const outcome = save(blob);
+  return outcome === 'downloaded' ? outcome : shareLink(caption);
 }
 
 function shareLink(caption: string): ShareOutcome {

@@ -33,22 +33,19 @@ export async function saveSettings(lang: string, allergens: string[]): Promise<v
   } catch {}
 }
 
-// Туториал «Или / Или» показывается один раз. Храним флаг в CloudStorage Telegram —
-// он переживает очистку вебвью и переезд на другое устройство; localStorage остаётся
-// запасным вариантом для браузера и старых клиентов.
+// Туториалы (общий по приложению + «Или / Или») показываются один раз каждый. Храним флаг
+// в CloudStorage Telegram — он переживает очистку вебвью и переезд на другое устройство;
+// localStorage остаётся запасным вариантом для браузера и старых клиентов.
 const BATTLE_ONBOARDING_KEY = 'foodBattleOnboardingSeen';
+const APP_ONBOARDING_KEY = 'appOnboardingSeen';
 
 function cloud(): any | null {
   const cs = (window as any).Telegram?.WebApp?.CloudStorage;
   return cs?.getItem && cs?.setItem ? cs : null;
 }
 
-function localFlag(): boolean {
-  try { return localStorage.getItem(BATTLE_ONBOARDING_KEY) === 'true'; } catch { return false; }
-}
-
-export function isBattleOnboardingSeen(): Promise<boolean> {
-  if (localFlag()) return Promise.resolve(true);
+function isFlagSeen(key: string): Promise<boolean> {
+  try { if (localStorage.getItem(key) === 'true') return Promise.resolve(true); } catch {}
   const cs = cloud();
   if (!cs) return Promise.resolve(false);
   return new Promise((resolve) => {
@@ -57,15 +54,20 @@ export function isBattleOnboardingSeen(): Promise<boolean> {
     // Сеть может не ответить — подсказку лучше показать лишний раз, чем подвесить экран.
     setTimeout(() => done(false), 1200);
     try {
-      cs.getItem(BATTLE_ONBOARDING_KEY, (err: unknown, value: string) => done(!err && value === 'true'));
+      cs.getItem(key, (err: unknown, value: string) => done(!err && value === 'true'));
     } catch { done(false); }
   });
 }
 
-export function markBattleOnboardingSeen(): void {
-  try { localStorage.setItem(BATTLE_ONBOARDING_KEY, 'true'); } catch {}
-  try { cloud()?.setItem(BATTLE_ONBOARDING_KEY, 'true', () => {}); } catch {}
+function markFlagSeen(key: string): void {
+  try { localStorage.setItem(key, 'true'); } catch {}
+  try { cloud()?.setItem(key, 'true', () => {}); } catch {}
 }
+
+export const isBattleOnboardingSeen = () => isFlagSeen(BATTLE_ONBOARDING_KEY);
+export const markBattleOnboardingSeen = () => markFlagSeen(BATTLE_ONBOARDING_KEY);
+export const isAppOnboardingSeen = () => isFlagSeen(APP_ONBOARDING_KEY);
+export const markAppOnboardingSeen = () => markFlagSeen(APP_ONBOARDING_KEY);
 
 // Callback-based wrappers for components that load settings on mount
 export function loadDiet(onLoad: (items: string[]) => void): void {

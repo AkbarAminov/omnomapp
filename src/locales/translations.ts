@@ -49,6 +49,8 @@ const ru = {
   btn_retry:          'Пройти заново',
   btn_all_results:    'Все варианты',
   btn_back:           'Назад',
+  result_feedback_q:      'Угадали?',
+  result_feedback_thanks: 'Спасибо!',
 
   // ── Results list ─────────────────────────────────────────────────────────────
   results_title:       'Тебе подойдёт',
@@ -111,6 +113,17 @@ const ru = {
   battle_tutorial_title: 'Выбирай, что хочется больше',
   battle_tutorial_sub:   'Оставляй фаворита — мы будем подбирать ему новых соперников. А если блюдо не хочется совсем, смахни его влево.',
   battle_tutorial_cta:   'Понятно',
+
+  // ── App onboarding (первый запуск) ─────────────────────────────────────────
+  onboarding_skip:    'Пропустить',
+  onboarding_next:    'Далее',
+  onboarding_start:   'Начать!',
+  onboarding_1_title: 'Отвечай свайпом',
+  onboarding_1_sub:   'Листай карточку вправо — «да», влево — «нет», вверх — «без разницы». Можно и просто нажимать на кнопки.',
+  onboarding_2_title: 'ИИ подберёт блюдо',
+  onboarding_2_sub:   'После пары вопросов покажем то, что подходит больше всего, — с процентом совпадения.',
+  onboarding_3_title: 'Или/Или, История, Рандомайзер',
+  onboarding_3_sub:   'Не хочешь отвечать на вопросы — выбирай блюдо через «Или/Или» или жми «Рандомайзер». Все находки остаются в Истории.',
   battle_question:     'Что хочется сейчас?',
   battle_or:           'или',
   battle_reject:       'сегодня нет',
@@ -185,6 +198,8 @@ const uz: Record<keyof typeof ru, string> = {
   btn_retry:          'Qayta boshlash',
   btn_all_results:    'Barcha variantlar',
   btn_back:           'Orqaga',
+  result_feedback_q:      'Topdikmi?',
+  result_feedback_thanks: 'Rahmat!',
 
   // ── Results list ─────────────────────────────────────────────────────────────
   results_title:       'Siz uchun mos',
@@ -247,6 +262,17 @@ const uz: Record<keyof typeof ru, string> = {
   battle_tutorial_title: 'Ko‘proq nimani xohlasangiz, shuni tanlang',
   battle_tutorial_sub:   "Sevimlisini qoldiring — unga yangi raqiblar topamiz. Taom umuman xohlanmasa, chapga suring.",
   battle_tutorial_cta:   'Tushunarli',
+
+  // ── App onboarding (birinchi ochilish) ─────────────────────────────────────
+  onboarding_skip:    "O'tkazib yuborish",
+  onboarding_next:    'Keyingisi',
+  onboarding_start:   'Boshlash!',
+  onboarding_1_title: 'Svayp bilan javob bering',
+  onboarding_1_sub:   'Kartani o‘ngga suring — «ha», chapga — «yo‘q», tepaga — «farqi yo‘q». Tugmalarni bosish ham mumkin.',
+  onboarding_2_title: 'AI taom tanlaydi',
+  onboarding_2_sub:   'Bir nechta savoldan so‘ng eng mos taomni moslik foizi bilan ko‘rsatamiz.',
+  onboarding_3_title: "Yoki/Yoki, Tarix, Tasodifiy",
+  onboarding_3_sub:   "Savollarga javob berishni xohlamasangiz — «Yoki/Yoki» yoki «Tasodifiy» tugmasini bosing. Barcha tanlovlar Tarixda qoladi.",
   battle_question:     'Hozir nima xohlaysiz?',
   battle_or:           'yoki',
   battle_reject:       'bugun emas',

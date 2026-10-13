@@ -1,0 +1,4 @@
+# Supabase CLI local cache — environment-specific, not project config.
+.branches
+.temp
+.DS_Store
