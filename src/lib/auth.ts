@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { track } from '../logic/analytics';
+import { flush, track } from '../logic/analytics';
 
 // Session refresh_token only — convenience cache so a flaky network on app_open doesn't
 // force a profile-less run. Never cached to localStorage: outside Telegram there is no
@@ -50,6 +50,7 @@ async function authWithEdgeFunction(initData: string): Promise<boolean> {
   if (error || !data?.access_token || !data?.refresh_token) {
     const { reason, status } = await authFailureReason(error);
     track('auth_failed', { props: { step: 'edge_function', reason, status } });
+    flush();
     return false;
   }
   const { error: sessionErr } = await supabase.auth.setSession({
@@ -58,6 +59,7 @@ async function authWithEdgeFunction(initData: string): Promise<boolean> {
   });
   if (sessionErr) {
     track('auth_failed', { props: { step: 'set_session', reason: sessionErr.message } });
+    flush();
     return false;
   }
   cacheRefreshToken(data.refresh_token);
@@ -72,6 +74,7 @@ async function authWithCachedToken(): Promise<boolean> {
   const { data, error } = await supabase.auth.refreshSession({ refresh_token: cached });
   if (error || !data.session) {
     track('auth_failed', { props: { step: 'refresh_session', reason: error?.message ?? 'no_session' } });
+    flush();
     return false;
   }
   cacheRefreshToken(data.session.refresh_token);
@@ -84,9 +87,18 @@ async function authWithCachedToken(): Promise<boolean> {
 export async function initAuth(): Promise<boolean> {
   try {
     const initData = getInitData();
-    if (initData && (await authWithEdgeFunction(initData))) return true;
+    // Предыдущая диагностика молчала именно в этой ветке: без initData authWithEdgeFunction
+    // не вызывается вообще, и до сих пор не было видно, это ли происходит в реальном Telegram.
+    if (!initData) {
+      track('auth_failed', { props: { step: 'no_init_data', platform: (window as any).Telegram?.WebApp?.platform ?? 'no_telegram_object' } });
+      flush();
+      return await authWithCachedToken();
+    }
+    if (await authWithEdgeFunction(initData)) return true;
     return await authWithCachedToken();
   } catch (e) {
+    track('auth_failed', { props: { step: 'exception', reason: (e as Error)?.message ?? String(e) } });
+    flush();
     console.warn('[OmNom] auth init failed:', e);
     return false;
   }
