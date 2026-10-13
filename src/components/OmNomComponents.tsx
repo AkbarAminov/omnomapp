@@ -711,11 +711,16 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ children, onSwi
     if (exiting.current || confirming.current) return;
     confirming.current = true;
     haptic('light');
+    // Свайп пальцем сообщает направление непрерывно через onPointerMove, поэтому карточка
+    // позади успевает показать настоящий следующий вопрос ещё до commit(). Кнопка раньше
+    // этого не делала вообще — подложка оставалась на дефолтной ветке «без разницы» и на
+    // долю секунды показывала не тот вопрос, который реально откроется.
+    reportDir(dir);
     const edge = SWIPE_DISTANCE * 1.4;
     if (dir === 'up') pose(0, -edge, '140ms ease-out');
     else pose(dir === 'right' ? edge : -edge, 0, '140ms ease-out');
     timer.current = setTimeout(() => commit(dir), CONFIRM_HOLD_MS);
-  }, [commit, pose]);
+  }, [commit, pose, reportDir]);
 
   useImperativeHandle(ref, () => ({ swipe: confirmThenCommit }), [confirmThenCommit]);
 
@@ -1720,7 +1725,7 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
               const desc = lang === 'uz' ? (dish.description_uz || dish.description) : dish.description;
               const cuisine = cuisineOptions.find((c) => c.id === dish.cuisine);
               return (
-                <div key={dish.id} style={{ flex: '0 0 100%', minWidth: 0, padding: `0 ${PAD}`, overflowY: 'auto' }}>
+                <div key={dish.id} style={{ flex: '0 0 100%', width: '100%', minWidth: 0, padding: `0 ${PAD}`, overflowY: 'auto' }}>
                   <div style={{ position: 'relative', width: '100%', aspectRatio: '1.1', borderRadius: '28px', overflow: 'hidden', backgroundColor: '#FFF1DD' }}>
                     <DishImage image={dish.image} emoji={dish.emoji} alt={name} emojiSize="clamp(84px, 24vw, 120px)" />
                     {dish.matchPercent != null && (
