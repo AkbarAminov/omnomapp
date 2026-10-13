@@ -537,7 +537,7 @@ function OmNomApp() {
   const underNav = activeTab === 'history' || (activeTab === 'home' && flowScreen === 'results');
 
   return (
-    <div style={{ width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+    <div style={{ width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', height: '100dvh', paddingTop: 'var(--tg-safe-top, 0px)' }}>
       {/* key re-mounts on screen change → screenFadeIn; the quiz keeps one key between questions */}
       <div
         key={screenKey}

@@ -15,6 +15,11 @@ declare global {
         colorScheme: 'light' | 'dark';
         platform: string;
         themeParams: Record<string, string>;
+        isVersionAtLeast?(version: string): boolean;
+        requestFullscreen?(): void;
+        safeAreaInset?: { top: number; bottom: number; left: number; right: number };
+        contentSafeAreaInset?: { top: number; bottom: number; left: number; right: number };
+        onEvent?(eventType: string, callback: () => void): void;
         openTelegramLink(url: string): void;
         openLink(url: string, options?: { try_instant_view?: boolean }): void;
         MainButton: {
@@ -49,6 +54,22 @@ function Root() {
     if (tg) {
       tg.ready();
       tg.expand();
+      // Полноэкранный режим (Bot API 8.0+) убирает нативную шапку Telegram («Закрыть /
+      // OmNom / ⋯»); контент тогда рисуется прямо под системным статус-баром. safeAreaInset —
+      // вырез/home-indicator устройства, contentSafeAreaInset — место под собственные плавающие
+      // элементы Telegram поверх фуллскрина. CSS env(safe-area-inset-*) внутри их WebView в этом
+      // режиме не отражает то же самое, поэтому Telegram отдаёт оба числом и шлёт события при
+      // их изменении — переносим в CSS-переменную, которую читают верхние отступы экранов.
+      if (tg.isVersionAtLeast?.('8.0')) {
+        tg.requestFullscreen?.();
+        const syncSafeArea = () => {
+          const top = (tg.safeAreaInset?.top ?? 0) + (tg.contentSafeAreaInset?.top ?? 0);
+          document.documentElement.style.setProperty('--tg-safe-top', `${top}px`);
+        };
+        syncSafeArea();
+        tg.onEvent?.('safeAreaChanged', syncSafeArea);
+        tg.onEvent?.('contentSafeAreaChanged', syncSafeArea);
+      }
     }
     // Fire-and-forget: must not delay first render or ever surface to the UI. The session
     // insert needs auth.uid(), so it's chained after initAuth rather than fired in parallel.

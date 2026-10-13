@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Overwritten from main.tsx once Telegram reports safeAreaInset/contentSafeAreaInset
+     in fullscreen mode; 0 outside Telegram or before that fires. */
+  --tg-safe-top: 0px;
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
