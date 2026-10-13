@@ -369,31 +369,39 @@ function PressButton({
 export function AppLoadingScreen() {
   const { t } = useLang();
   return (
+    // Кремовый фон + маскот, как на всех остальных экранах (Старт, История) — раньше тут был
+    // отдельный сплошной оранжевый экран, выбивавшийся из стилистики остального приложения.
     <div style={{
-      minHeight: '100%', height: '100%', backgroundColor: '#F48924',
+      minHeight: '100%', height: '100%', backgroundColor: '#FFF1DC',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: 'clamp(22px, 4dvh, 34px)',
+      gap: 'clamp(14px, 2.6dvh, 24px)', padding: PAD, textAlign: 'center',
     }}>
       <img
         src="/assets/logo_horizontal.svg"
         alt="omnom"
         style={{
-          width: 'clamp(220px, 62vw, 320px)', height: 'auto', display: 'block',
+          width: 'clamp(140px, 38vw, 190px)', height: 'auto', display: 'block',
           animation: 'logoBreathe 2.2s ease-in-out infinite',
         }}
       />
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+      <img
+        src="/assets/char-loading.png"
+        alt=""
+        style={{ width: 'min(clamp(160px, 56vw, 260px), 32dvh)', objectFit: 'contain' }}
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
         <div style={{ display: 'flex', gap: '7px' }}>
           {[0, 1, 2].map((i) => (
             <span key={i} style={{
-              width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#fff',
+              width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#F48924',
               animation: `loadingDot 1.1s ease-in-out ${i * 0.15}s infinite`,
             }} />
           ))}
         </div>
         <p style={{
-          fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#FFEEDB', opacity: 0.9,
-          fontSize: 'clamp(13px, 3.6vw, 15px)', margin: 0,
+          fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#6C2912', opacity: 0.85,
+          fontSize: 'clamp(14px, 3.8vw, 17px)', margin: 0,
         }}>
           {t('app_loading_text')}
         </p>
@@ -818,7 +826,10 @@ function QuestionImage({ question }: { question: Question }) {
     );
   }
   return (
-    <img src={question.image} alt={lang === 'uz' ? question.question_uz : question.question_ru} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={() => setImgError(true)} draggable={false} />
+    // contain, не cover: узкое/низкое окно (десктопный попап Telegram, короткий экран) иначе
+    // обрезает персонажа по рукам и еде вместо аккуратного уменьшения — на обычном телефоне
+    // разницы почти не видно, а на коротких окнах cover откровенно ломает картинку.
+    <img src={question.image} alt={lang === 'uz' ? question.question_uz : question.question_ru} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} onError={() => setImgError(true)} draggable={false} />
   );
 }
 
@@ -828,16 +839,19 @@ function QuestionCardBody({ question }: { question: Question }) {
   const subtitle = lang === 'uz' ? question.subtitle_uz : question.subtitle_ru;
   return (
     <>
-      <div style={{ padding: 'clamp(20px, 4.2%, 42px) clamp(16px, 4.1%, 18px) clamp(10px, 1.8%, 10px)', textAlign: 'center', flexShrink: 0 }}>
+      {/* dvh в довесок к vw/%: на узком, но ещё и низком окне (десктопный попап) один только
+          vw держит текст крупным, съедая место под картинку персонажа — добавочный dvh даёт
+          тексту сжаться вместе с высотой, а не только с шириной. */}
+      <div style={{ padding: 'clamp(10px, 2dvh, 42px) clamp(16px, 4.1%, 18px) clamp(6px, 1dvh, 10px)', textAlign: 'center', flexShrink: 0 }}>
         <h2 style={{
           fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
-          fontSize: 'clamp(24px, 8.8vw, 39px)', lineHeight: 1.18, letterSpacing: '-0.02em',
+          fontSize: 'clamp(20px, calc(6vw + 2dvh), 39px)', lineHeight: 1.18, letterSpacing: '-0.02em',
         }}>
           {title}
         </h2>
         <p style={{
           fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.7,
-          fontSize: 'clamp(13px, 3.5vw, 16px)', marginTop: 'clamp(8px, 1.3%, 14px)',
+          fontSize: 'clamp(12px, calc(2.4vw + 1dvh), 16px)', marginTop: 'clamp(4px, 1dvh, 14px)',
           lineHeight: '25px',
         }}>
           {subtitle}
