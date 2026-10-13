@@ -36,13 +36,24 @@ function getInitData(): string | null {
 // и сам trackEvent() при этом молчит (нет профиля → no-op), так что без этой диагностики
 // причина никогда не всплывёт. events (эта функция) не требует auth.uid(), пишет всегда.
 async function authFailureReason(error: unknown): Promise<{ reason: string; status: number | null }> {
-  const ctx = (error as { context?: Response })?.context;
-  if (ctx) {
-    const body = await ctx.clone().json().catch(() => null);
-    return { reason: body?.error ?? (error as Error)?.message ?? 'http_error', status: ctx.status ?? null };
-  }
-  if (error) return { reason: (error as Error)?.message ?? 'unknown_error', status: null };
-  return { reason: 'no_tokens_in_response', status: null };
+  if (!error) return { reason: 'no_tokens_in_response', status: null };
+  const err = error as { context?: any; message?: string };
+  const ctx = err.context;
+  const status: number | null = ctx?.status ?? null;
+  let reason = err.message ?? 'http_error';
+  // .context не всегда настоящий Fetch Response в этой версии supabase-js (у него может не
+  // быть .clone()) — читаем без clone и глотаем любую ошибку чтения, чтобы сама диагностика
+  // никогда не маскировала причину провала своим же крашем.
+  try {
+    if (ctx && typeof ctx.json === 'function') {
+      const body = await ctx.json();
+      if (body?.error) reason = body.error;
+    } else if (ctx && typeof ctx.text === 'function') {
+      const text = await ctx.text();
+      if (text) reason = text.slice(0, 200);
+    }
+  } catch {}
+  return { reason, status };
 }
 
 async function authWithEdgeFunction(initData: string): Promise<boolean> {
