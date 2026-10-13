@@ -812,7 +812,7 @@ function QuestionImage({ question }: { question: Question }) {
   const { lang } = useLang();
   if (!question.image || imgError) {
     return (
-      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF1DD' }}>
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontSize: 'clamp(80px, 20vw, 120px)', filter: 'drop-shadow(0 8px 18px rgba(149,104,33,0.18))' }}>{question.emoji}</span>
       </div>
     );
@@ -843,7 +843,7 @@ function QuestionCardBody({ question }: { question: Question }) {
           {subtitle}
         </p>
       </div>
-      <div style={{ flex: 1, minHeight: 0, margin: '0 clamp(10px,2.5vw,14px) clamp(10px,2.5vw,14px)', borderRadius: '24px', backgroundColor: '#FFF1DD', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minHeight: 0, margin: '0 clamp(10px,2.5vw,14px) clamp(10px,2.5vw,14px)', borderRadius: '24px', overflow: 'hidden' }}>
         <QuestionImage key={question.id} question={question} />
       </div>
     </>
