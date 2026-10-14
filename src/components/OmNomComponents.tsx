@@ -1067,14 +1067,22 @@ function DishImage({ image, emoji, alt, emojiSize }: { image: string; emoji: str
   // разные блюда, и флаг «загружено» показал бы новое фото раньше времени.
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
-  const showImg = !!image && failedSrc !== image;
+  // У блюда вообще не было фото (обычный случай — только у части каталога есть реальные
+  // снимки) — это не ошибка, эмодзи остаётся штатной заглушкой. А вот если image был задан,
+  // но реально не загрузился (404/сеть) — показывать эмодзи ЭТОГО блюда было бы враньём
+  // («так это блюдо и выглядит»), поэтому для подтверждённо битой ссылки — нейтральная плитка.
+  const broken = !!image && failedSrc === image;
+  const showImg = !!image && !broken;
   const loaded = !!image && (loadedSrc === image || loadedImages.has(image));
   return (
     <div style={{
       position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'radial-gradient(circle at 50% 42%, #FFF6E8 0%, #FFE4BD 58%, #FFD29C 100%)',
     }}>
-      {(!showImg || !loaded) && (
+      {broken && (
+        <span style={{ fontSize: emojiSize, lineHeight: 1, opacity: 0.55, filter: 'drop-shadow(0 8px 18px rgba(149,104,33,0.22))' }}>🍽️</span>
+      )}
+      {!broken && (!showImg || !loaded) && (
         <span style={{ fontSize: emojiSize, lineHeight: 1, filter: 'drop-shadow(0 8px 18px rgba(149,104,33,0.22))' }}>{emoji}</span>
       )}
       {showImg && (

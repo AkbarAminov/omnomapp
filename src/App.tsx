@@ -244,6 +244,9 @@ function OmNomApp() {
     setAllCuisineResults(all.length > 0 ? all : null);
     pendingAnswersRef.current = { id: sessionId ?? newSessionId(), session, guessedDishId: top[0].id };
     addToHistory(top[0], session.mode, top[0].matchPercent, 1);
+    // Экран результата появится только после runLoading() (~1.5с) — греем фото топ-5, пока
+    // крутится прогресс, чтобы они уже были в кэше к моменту показа.
+    top.forEach((d) => preloadImage(d.image));
     runLoading();
   };
 
@@ -383,6 +386,7 @@ function OmNomApp() {
       return;
     }
     track('random_selected', { dish_id: dish.id, cuisine: dish.cuisine, props: { rerolled: rejectCurrent } });
+    preloadImage(dish.image);
     setResultVariant('randomizer');
     randomDishRef.current = dish;
     setResults([{ ...dish, matchPercent: null }]);
