@@ -3253,7 +3253,6 @@ export function ProfileScreen({ onSubPageChange }: {
               <ProfileUser />
               <div>
                 {PROFILE_ITEMS.map((item, i) => {
-                  const isNotify = item.id === 'notify';
                   return (
                     <button
                       key={item.id}
@@ -3262,15 +3261,15 @@ export function ProfileScreen({ onSubPageChange }: {
                         if (item.id === 'diet') goToSubPage('diet');
                         else if (item.id === 'lang') goToSubPage('language');
                         else if (item.id === 'share') handleShare();
+                        else if (item.id === 'notify') showToast(t('toast_soon'));
                       }}
-                      disabled={isNotify}
                       style={{
                         width: '100%', display: 'flex', alignItems: 'center', gap: '14px',
                         padding: 'clamp(14px, 3.2dvh, 18px) 0',
                         background: 'none', border: 'none',
                         borderBottom: i < PROFILE_ITEMS.length - 1 ? DIVIDER : 'none',
-                        cursor: isNotify ? 'default' : 'pointer',
-                        textAlign: 'left', opacity: isNotify ? 0.45 : 1,
+                        cursor: 'pointer',
+                        textAlign: 'left',
                       }}
                     >
                       <img src={item.icon} alt="" style={{ width: '22px', height: '22px', flexShrink: 0, objectFit: 'contain' }} />
@@ -3282,7 +3281,7 @@ export function ProfileScreen({ onSubPageChange }: {
                           {langLabel}
                         </span>
                       )}
-                      {!isNotify && <IconChevronRight />}
+                      <IconChevronRight />
                     </button>
                   );
                 })}

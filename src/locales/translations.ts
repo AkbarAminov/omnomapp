@@ -4,7 +4,7 @@ const ru = {
   // ── Navigation ──────────────────────────────────────────────────────────────
   nav_home:    'Главная',
   nav_history: 'История',
-  nav_battle:  'Или / Или',
+  nav_battle:  'Дуэль',
   nav_profile: 'Профиль',
 
   // ── App loading / error (initial dish fetch) ──────────────────────────────────
@@ -46,7 +46,7 @@ const ru = {
   result_no_exact:    'Точного совпадения нет',
   tab_all_cuisines:   'Все кухни',
   btn_nearby:         'Что рядом?',
-  btn_retry:          'Заново?',
+  btn_retry:          'Заново',
   btn_all_results:    'Все варианты',
   btn_back:           'Назад',
   result_feedback_q:      'Угадали?',
@@ -68,7 +68,7 @@ const ru = {
   history_mode_snack:   'Перекус',
   history_mode_dessert: 'Сладкое',
   history_mode_random:  'Рандомайзер',
-  history_mode_battle:  'Или / Или',
+  history_mode_battle:  'Дуэль',
 
   // ── Map ──────────────────────────────────────────────────────────────────────
   map_title:    'Заведения',
@@ -124,8 +124,8 @@ const ru = {
   onboarding_1_sub:   'Листай карточку вправо — «да», влево — «нет», вверх — «без разницы». Можно и просто нажимать на кнопки.',
   onboarding_2_title: 'ИИ подберёт блюдо',
   onboarding_2_sub:   'После пары вопросов покажем то, что подходит больше всего, — с процентом совпадения.',
-  onboarding_3_title: 'Или/Или, История, Рандомайзер',
-  onboarding_3_sub:   'Не хочешь отвечать на вопросы — выбирай блюдо через «Или/Или» или жми «Рандомайзер». Все находки остаются в Истории.',
+  onboarding_3_title: 'Дуэль, История, Рандомайзер',
+  onboarding_3_sub:   'Не хочешь отвечать на вопросы — выбирай блюдо через «Дуэль» или жми «Рандомайзер». Все находки остаются в Истории.',
   battle_question:     'Что хочется сейчас?',
   battle_or:           'или',
   battle_reject:       'сегодня нет',
@@ -158,7 +158,7 @@ const uz: Record<keyof typeof ru, string> = {
   // ── Navigation ──────────────────────────────────────────────────────────────
   nav_home:    'Bosh sahifa',
   nav_history: 'Tarix',
-  nav_battle:  'Yoki / Yoki',
+  nav_battle:  'Duel',
   nav_profile: 'Profil',
 
   // ── App loading / error (initial dish fetch) ──────────────────────────────────
@@ -221,7 +221,7 @@ const uz: Record<keyof typeof ru, string> = {
   history_mode_snack:   'Tamaddi',
   history_mode_dessert: 'Shirinlik',
   history_mode_random:  'Tasodifiy',
-  history_mode_battle:  'Yoki / Yoki',
+  history_mode_battle:  'Duel',
 
   // ── Map ──────────────────────────────────────────────────────────────────────
   map_title:    'Muassasalar',
@@ -277,8 +277,8 @@ const uz: Record<keyof typeof ru, string> = {
   onboarding_1_sub:   'Kartani o‘ngga suring — «ha», chapga — «yo‘q», tepaga — «farqi yo‘q». Tugmalarni bosish ham mumkin.',
   onboarding_2_title: 'AI taom tanlaydi',
   onboarding_2_sub:   'Bir nechta savoldan so‘ng eng mos taomni moslik foizi bilan ko‘rsatamiz.',
-  onboarding_3_title: "Yoki/Yoki, Tarix, Tasodifiy",
-  onboarding_3_sub:   "Savollarga javob berishni xohlamasangiz — «Yoki/Yoki» yoki «Tasodifiy» tugmasini bosing. Barcha tanlovlar Tarixda qoladi.",
+  onboarding_3_title: "Duel, Tarix, Tasodifiy",
+  onboarding_3_sub:   "Savollarga javob berishni xohlamasangiz — «Duel» yoki «Tasodifiy» tugmasini bosing. Barcha tanlovlar Tarixda qoladi.",
   battle_question:     'Hozir nima xohlaysiz?',
   battle_or:           'yoki',
   battle_reject:       'bugun emas',
