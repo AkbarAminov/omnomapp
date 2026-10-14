@@ -302,9 +302,14 @@ function OmNomApp() {
   };
 
   const beginQuiz = async (mode: Mode, cuisine: string) => {
-    if (!data) return;
+    // StartScreen/ModeSelectScreen/CuisineSelectionScreen больше не ждут data (см. content
+    // ниже) — на медленной сети можно успеть тапнуть раньше, чем придёт loadData(). Раньше
+    // это было недостижимо (экран появлялся только после data), поэтому просто молчать было
+    // можно; теперь ждём тот же кэширующий промис вместо тихого no-op.
+    const d = data ?? await loadData().catch(() => null);
+    if (!d) return;
     allergensRef.current = await getAllergens();
-    const session = startSession(data.dishes, mode, cuisine, allergensRef.current);
+    const session = startSession(d.dishes, mode, cuisine, allergensRef.current);
     nearEndRef.current = false;
     quizIdRef.current = newSessionId();
     quizStartedAtRef.current = Date.now();
@@ -320,8 +325,8 @@ function OmNomApp() {
       setFlowScreen('no-results');
       return;
     }
-    const first = pickNextQuestion(data.questions, session);
-    if (!first || isFinished(data.questions, session)) finalizeQuiz(session);
+    const first = pickNextQuestion(d.questions, session);
+    if (!first || isFinished(d.questions, session)) finalizeQuiz(session);
     else showQuestion(session, first, 0);
   };
 
@@ -356,7 +361,8 @@ function OmNomApp() {
   }, [data]);
 
   const handleRandomizer = async (rejectCurrent: boolean) => {
-    if (!data) return;
+    const d = data ?? await loadData().catch(() => null);
+    if (!d) return;
     const current = randomDishRef.current;
     if (rejectCurrent && current) {
       rejectedIdsRef.current = [current.id, ...rejectedIdsRef.current].slice(0, 30);
@@ -366,7 +372,7 @@ function OmNomApp() {
     const rejected = new Set(rejectedIdsRef.current);
     const historyIds = history.map((h) => h.dishId);
     const dish = pickRandomDish({
-      dishes: data.dishes,
+      dishes: d.dishes,
       excludeAllergens: await getAllergens(),
       recentIds: historyIds,
       likedIds: historyIds.filter((id) => !rejected.has(id)),
@@ -439,7 +445,7 @@ function OmNomApp() {
   const handleClearHistory = async () => { await clearHistory(); setHistory([]); };
 
   const screenKey = !data
-    ? (dataError ? 'app-error' : 'app-loading')
+    ? (dataError ? 'app-error' : flowScreen === 'start' && activeTab === 'home' ? 'start' : 'app-loading')
     : activeTab !== 'home' ? activeTab : flowScreen;
 
   const showNav = !!data && (
@@ -449,7 +455,12 @@ function OmNomApp() {
 
   let content: React.ReactNode = null;
   if (!data) {
-    content = dataError ? <AppErrorScreen onRetry={initApp} /> : <AppLoadingScreen />;
+    // StartScreen — чистый маркетинговый текст и две кнопки, dishes/questions ему не нужны;
+    // loadData() уже идёт в фоне (initApp выше), ждать его ради первого экрана незачем.
+    // Остальные экраны (mode/cuisine/квиз) по-прежнему недостижимы, пока data не придёт.
+    content = dataError ? <AppErrorScreen onRetry={initApp} />
+      : flowScreen === 'start' && activeTab === 'home' ? <StartScreen onStart={handleStart} onRandomizer={() => handleRandomizer(false)} />
+      : <AppLoadingScreen />;
   } else if (activeTab === 'history') {
     content = <HistoryScreen history={history} dishById={data.dishById} onClearHistory={handleClearHistory} />;
   } else if (activeTab === 'battle') {

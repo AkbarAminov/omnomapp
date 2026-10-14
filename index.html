@@ -5,6 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>OmNom</title>
+    <!-- Инлайн, без сети: до того как придёт src/index.css, страница не должна мигнуть белым. -->
+    <style>html,body{background:#FFF1DC}</style>
+    <!-- API и сторож картинок — один и тот же хост Supabase; второй preconnect не нужен. -->
+    <link rel="preconnect" href="https://pgmrurujvvpxpembsqir.supabase.co" crossorigin />
     <!-- defer: раньше этот синхронный тег стоял первым в <head> и блокировал разбор страницы —
          шрифты, CSS и наш модуль не могли начать грузиться, пока telegram.org не ответит.
          defer сохраняет порядок (выполнится раньше нашего type="module" в конце body — defer- и
