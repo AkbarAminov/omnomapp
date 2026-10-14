@@ -28,6 +28,26 @@ function loadImage(src: string, crossOrigin = true): Promise<HTMLImageElement | 
   });
 }
 
+const MAX_SHARE_BYTES = 400 * 1024;
+
+// canvas.toBlob игнорирует quality для 'image/png' (там всегда lossless максимального
+// размера) — webp реально сжимается, поэтому им и целимся в лимит, пробуя ниже качество,
+// пока файл не влезет под 400 КБ.
+function encodeUnderLimit(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  const qualities = [0.85, 0.75, 0.65, 0.55, 0.45];
+  return new Promise((resolve) => {
+    let i = 0;
+    const tryNext = () => {
+      canvas.toBlob((blob) => {
+        if (!blob || blob.size <= MAX_SHARE_BYTES || i === qualities.length - 1) { resolve(blob); return; }
+        i++;
+        tryNext();
+      }, 'image/webp', qualities[i]);
+    };
+    tryNext();
+  });
+}
+
 // Переносим название по словам и подбираем кегль так, чтобы влезло не больше двух строк.
 function layoutTitle(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): { lines: string[]; size: number } {
   for (const size of [96, 86, 76, 66, 58, 50]) {
@@ -112,7 +132,7 @@ export async function buildShareCard(dish: Dish, name: string, caption: string):
       ctx.fillText('omnom', W / 2, H - 150);
     }
 
-    return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
+    return encodeUnderLimit(canvas);
   } catch {
     return null;
   }
@@ -173,7 +193,7 @@ export async function buildInviteCard(caption: string): Promise<Blob | null> {
       ctx.fillText('omnom', W / 2, H - 150);
     }
 
-    return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
+    return encodeUnderLimit(canvas);
   } catch {
     return null;
   }
@@ -185,7 +205,7 @@ export type ShareOutcome = 'shared' | 'downloaded' | 'failed';
 // жеста пользователя, а рисование холста 1080×1920 легко выходит за это окно.
 export function shareBlob(blob: Blob | null, caption: string): Promise<ShareOutcome> {
   if (!blob) return Promise.resolve(shareLink(caption));
-  const file = new File([blob], 'omnom.png', { type: 'image/png' });
+  const file = new File([blob], 'omnom.webp', { type: 'image/webp' });
 
   const nav = navigator as Navigator & { canShare?(data: ShareData): boolean };
   // canShare() сама иногда недоступна или занижает поддержку файлов в WebView (в т.ч.
@@ -211,11 +231,14 @@ function fallback(blob: Blob, caption: string): ShareOutcome {
   return outcome === 'downloaded' ? outcome : shareLink(caption);
 }
 
-function shareLink(caption: string): ShareOutcome {
+// Основной путь «Поделиться» (не только запасной): открывает нативный выбор чата Telegram
+// с готовой ссылкой на Mini App — настоящая отправка файла при этом невозможна, отправка
+// картинки сделана отдельной кнопкой именно поэтому.
+export function shareLink(caption: string): ShareOutcome {
   const tg = (window as any).Telegram?.WebApp;
   if (!tg?.openTelegramLink) return 'failed';
   try {
-    const url = encodeURIComponent(BOT_URL);
+    const url = encodeURIComponent(miniAppShareUrl());
     const text = encodeURIComponent(caption);
     tg.openTelegramLink(`https://t.me/share/url?url=${url}&text=${text}`);
     return 'shared';
@@ -226,12 +249,23 @@ function shareLink(caption: string): ShareOutcome {
 
 export const BOT_URL = 'https://t.me/Omnomfoodbot';
 
+// VITE_APP_SHORTNAME — «короткое имя» Mini App, заводится один раз через /newapp у
+// @BotFather; без него полноценной ссылки вида t.me/<bot>/<app>?startapp= не существует.
+// Пока переменная не задана (сегодня так и есть), отдаём обычную ссылку на бота — рабочую,
+// просто без автозапуска квиза и без startapp-метки в аналитике.
+export function miniAppShareUrl(startParam = 'share'): string {
+  const env = (import.meta as unknown as { env?: Record<string, string> }).env;
+  const username = env?.VITE_BOT_USERNAME || 'Omnomfoodbot';
+  const shortname = env?.VITE_APP_SHORTNAME;
+  return shortname ? `https://t.me/${username}/${shortname}?startapp=${startParam}` : BOT_URL;
+}
+
 function save(blob: Blob): ShareOutcome {
   try {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'omnom.png';
+    a.download = 'omnom.webp';
     document.body.appendChild(a);
     a.click();
     a.remove();

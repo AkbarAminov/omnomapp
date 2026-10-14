@@ -10,7 +10,7 @@ import { affinity, canPlay, createBattleSession, registerChoice } from '../logic
 import type { BattleSession } from '../logic/battleEngine';
 import { isBattleOnboardingSeen, loadDiet, markBattleOnboardingSeen, saveSettings } from '../logic/settingsStorage';
 import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
-import { BOT_URL, buildInviteCard, buildShareCard, shareBlob } from '../logic/shareCard';
+import { buildShareCard, miniAppShareUrl, shareBlob, shareLink } from '../logic/shareCard';
 import { trackEvent } from '../logic/metrics';
 import { openExternalLink } from '../lib/openLink';
 import { getTelegramUserInfo } from '../lib/userId';
@@ -1232,11 +1232,20 @@ export function SingleResultScreen({
     return () => { alive = false; };
   }, [variant, dish, dishName, caption]);
 
+  // Текст-шаблон общий для обеих кнопок, ссылка добавляется по-разному: у shareLink она
+  // летит отдельным url-параметром диалога Telegram, а у shareBlob (файл) отдельного поля
+  // для ссылки нет — её нужно дописать прямо в подпись к картинке.
+  const linkText = `${caption}: ${dishName}. ${t('share_description')}`;
+
   const share = () => {
     haptic('light');
-    // Подпись на картинке — короткая ("Мой выбор на сегодня"); в само сообщение к ней
-    // добавляем описание приложения и ссылку на бота, иначе получатель не поймёт, куда перейти.
-    const text = `${caption}\n\n${t('share_description')}\n${BOT_URL}`;
+    const outcome = shareLink(linkText);
+    if (outcome === 'failed') { setToast(t('toast_share_failed')); setTimeout(() => setToast(null), 2200); }
+  };
+
+  const shareImage = () => {
+    haptic('light');
+    const text = `${linkText}\n${miniAppShareUrl()}`;
     void shareBlob(card, text).then((outcome) => {
       if (outcome === 'shared') return;
       setToast(t(outcome === 'downloaded' ? 'toast_share_saved' : 'toast_share_failed'));
@@ -1403,12 +1412,28 @@ export function SingleResultScreen({
           padding: `clamp(16px, 2.6dvh, 28px) ${PAD} clamp(10px, 1.8dvh, 18px)`,
           flexShrink: 0,
         }}>
-          <PressButton onClick={share} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
-              <IconShare color="#fff" />
-              {t('btn_share_result')}
-            </span>
-          </PressButton>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={shareImage}
+              aria-label={t('btn_share_image')}
+              style={{
+                flexShrink: 0, width: 'clamp(54px, 12vw, 66px)', height: 'clamp(54px, 12vw, 66px)', borderRadius: '999px',
+                backgroundColor: '#fff', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+              }}
+              {...usePressScale(0.94)}
+            >
+              <IconShare />
+            </button>
+            <PressButton onClick={share} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+                <IconShare color="#fff" />
+                {t('btn_share_result')}
+              </span>
+            </PressButton>
+          </div>
           {onRetry && (
             <button
               type="button"
@@ -1440,6 +1465,9 @@ export function SingleResultScreen({
           )}
           {variant === 'quiz' && (
             <ActionCircle size="large" icon={<img src="/assets/icons/settings-share.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_share_result')} onClick={share} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
+          )}
+          {variant === 'quiz' && (
+            <ActionCircle size="large" icon={<IconShare />} label={t('btn_share_image')} onClick={shareImage} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
           )}
           {onRetry && (
             <ActionCircle size="large" icon={<img src="/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_retry')} onClick={onRetry} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
@@ -1880,15 +1908,9 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
               const d = dishes[index];
               const name = lang === 'uz' ? (d.name_uz || d.name) : d.name;
               haptic('light');
-              const caption = t('share_card_caption');
-              const text = `${caption}\n\n${t('share_description')}\n${BOT_URL}`;
-              void buildShareCard(d, name, caption)
-                .then((blob) => shareBlob(blob, text))
-                .then((outcome) => {
-                  if (outcome === 'shared') return;
-                  setToast(t(outcome === 'downloaded' ? 'toast_share_saved' : 'toast_share_failed'));
-                  setTimeout(() => setToast(null), 2200);
-                });
+              const text = `${t('share_card_caption')}: ${name}. ${t('share_description')}`;
+              const outcome = shareLink(text);
+              if (outcome === 'failed') { setToast(t('toast_share_failed')); setTimeout(() => setToast(null), 2200); }
             }}
             style={{
               flexShrink: 0, width: '56px', height: 'clamp(54px, 12vw, 66px)', borderRadius: '999px',
@@ -3175,7 +3197,6 @@ export function ProfileScreen({ onSubPageChange }: {
   const [subPage, setSubPage] = useState<ProfileSubPage>('none');
   const [diet, setDiet] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [inviteCard, setInviteCard] = useState<Blob | null>(null);
   const shareText = t('share_text');
 
   const showToast = (message: string) => {
@@ -3187,14 +3208,6 @@ export function ProfileScreen({ onSubPageChange }: {
     loadDiet(d => setDiet(d));
   }, []);
 
-  // Картинка готовится заранее, пока человек на экране профиля: по нажатию кнопки её
-  // нужно только отдать — иначе платформа сочтёт системный share вызванным без жеста.
-  useEffect(() => {
-    let alive = true;
-    buildInviteCard(shareText).then((blob) => { if (alive) setInviteCard(blob); });
-    return () => { alive = false; };
-  }, [shareText]);
-
   const goToSubPage = (page: ProfileSubPage) => {
     setSubPage(page);
     onSubPageChange?.(page !== 'none');
@@ -3205,16 +3218,12 @@ export function ProfileScreen({ onSubPageChange }: {
   };
 
   const handleShare = () => {
-    // Картинка несёт только заголовок; подпись к ней — заголовок + описание + ссылка,
-    // иначе получатель увидит красивое фото, но не поймёт, что это и куда перейти.
-    const text = `${shareText}\n\n${t('share_description')}\n${BOT_URL}`;
-    void shareBlob(inviteCard, text).then((outcome) => {
-      if (outcome === 'shared') return;
-      if (outcome === 'downloaded') { showToast(t('toast_share_saved')); return; }
-      navigator.clipboard?.writeText(BOT_URL).then(() => {
-        showToast(t('toast_copied'));
-      }).catch(() => showToast(t('toast_share_failed')));
-    });
+    const text = `${shareText}. ${t('share_description')}`;
+    const outcome = shareLink(text);
+    if (outcome === 'shared') return;
+    navigator.clipboard?.writeText(miniAppShareUrl()).then(() => {
+      showToast(t('toast_copied'));
+    }).catch(() => showToast(t('toast_share_failed')));
   };
 
   const langLabel = lang === 'uz' ? 'Ozbekcha' : 'Русский';

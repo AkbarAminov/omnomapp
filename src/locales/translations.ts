@@ -137,6 +137,7 @@ const ru = {
   battle_similar:      'Похоже на твой выбор',
   battle_again:        'Сыграть ещё раз',
   btn_share_result:    'Поделиться',
+  btn_share_image:     'Отправить картинкой',
   share_card_caption:  'Мой выбор на сегодня',
   toast_share_saved:   'Картинка сохранена',
   toast_share_failed:  'Не получилось поделиться',
@@ -150,7 +151,7 @@ const ru = {
   toast_copied: 'Ссылка скопирована',
   toast_soon:   'Скоро',
   share_text:   'Расскажи о приложении',
-  share_description: 'OMNOM помогает быстро решить, что поесть — отвечай на вопросы свайпом и получи 3-5 блюд, которые захочется съесть прямо сейчас.',
+  share_description: 'OMNOM помогает быстро решить, что поесть, отвечай на вопросы свайпом и получи 3-5 блюд, которые захочется съесть прямо сейчас.',
 } as const;
 
 const uz: Record<keyof typeof ru, string> = {
@@ -289,6 +290,7 @@ const uz: Record<keyof typeof ru, string> = {
   battle_similar:      'Tanlovingizga o‘xshash',
   battle_again:        "Yana o'ynash",
   btn_share_result:    'Ulashish',
+  btn_share_image:     'Rasm sifatida yuborish',
   share_card_caption:  'Bugungi tanlovim',
   toast_share_saved:   'Rasm saqlandi',
   toast_share_failed:  "Ulashib bo'lmadi",
@@ -302,7 +304,7 @@ const uz: Record<keyof typeof ru, string> = {
   toast_copied: 'Havola nusxalandi',
   toast_soon:   'Tez orada',
   share_text:   'Ilova haqida ayt',
-  share_description: "OMNOM nima yeyishni tezda hal qilishga yordam beradi — savollarga svayp bilan javob bering va hozir aynan xohlagan 3-5 taomni oling.",
+  share_description: "OMNOM nima yeyishni tezda hal qilishga yordam beradi, savollarga svayp bilan javob bering va hozir aynan xohlagan 3-5 taomni oling.",
 };
 
 export const translations: Record<Lang, Record<keyof typeof ru, string>> = { ru, uz };
