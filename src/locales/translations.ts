@@ -147,7 +147,8 @@ const ru = {
   btn_cancel:   'Отмена',
   toast_copied: 'Ссылка скопирована',
   toast_soon:   'Скоро',
-  share_text:   'Нашёл что поесть в OMNOM!',
+  share_text:   'Расскажи о приложении',
+  share_description: 'OMNOM помогает быстро решить, что поесть — отвечай на вопросы свайпом и получи 3-5 блюд, которые захочется съесть прямо сейчас.',
 } as const;
 
 const uz: Record<keyof typeof ru, string> = {
@@ -296,7 +297,8 @@ const uz: Record<keyof typeof ru, string> = {
   btn_cancel:   'Bekor qilish',
   toast_copied: 'Havola nusxalandi',
   toast_soon:   'Tez orada',
-  share_text:   'OMNOM da nima yeyishni topdim!',
+  share_text:   'Ilova haqida ayt',
+  share_description: "OMNOM nima yeyishni tezda hal qilishga yordam beradi — savollarga svayp bilan javob bering va hozir aynan xohlagan 3-5 taomni oling.",
 };
 
 export const translations: Record<Lang, Record<keyof typeof ru, string>> = { ru, uz };

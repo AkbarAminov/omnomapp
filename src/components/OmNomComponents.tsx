@@ -10,7 +10,7 @@ import { affinity, canPlay, createBattleSession, registerChoice } from '../logic
 import type { BattleSession } from '../logic/battleEngine';
 import { isBattleOnboardingSeen, loadDiet, markBattleOnboardingSeen, saveSettings } from '../logic/settingsStorage';
 import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
-import { buildShareCard, shareBlob } from '../logic/shareCard';
+import { BOT_URL, buildInviteCard, buildShareCard, shareBlob } from '../logic/shareCard';
 import { openExternalLink } from '../lib/openLink';
 import { getTelegramUserInfo } from '../lib/userId';
 import { usePressScale } from '../hooks/usePressScale';
@@ -1217,7 +1217,10 @@ export function SingleResultScreen({
 
   const share = () => {
     haptic('light');
-    void shareBlob(card, caption).then((outcome) => {
+    // Подпись на картинке — короткая ("Мой выбор на сегодня"); в само сообщение к ней
+    // добавляем описание приложения и ссылку на бота, иначе получатель не поймёт, куда перейти.
+    const text = `${caption}\n\n${t('share_description')}\n${BOT_URL}`;
+    void shareBlob(card, text).then((outcome) => {
       if (outcome === 'shared') return;
       setToast(t(outcome === 'downloaded' ? 'toast_share_saved' : 'toast_share_failed'));
       setTimeout(() => setToast(null), 2200);
@@ -1811,8 +1814,10 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
               const d = dishes[index];
               const name = lang === 'uz' ? (d.name_uz || d.name) : d.name;
               haptic('light');
-              void buildShareCard(d, name, t('share_card_caption'))
-                .then((blob) => shareBlob(blob, t('share_card_caption')))
+              const caption = t('share_card_caption');
+              const text = `${caption}\n\n${t('share_description')}\n${BOT_URL}`;
+              void buildShareCard(d, name, caption)
+                .then((blob) => shareBlob(blob, text))
                 .then((outcome) => {
                   if (outcome === 'shared') return;
                   setToast(t(outcome === 'downloaded' ? 'toast_share_saved' : 'toast_share_failed'));
@@ -3094,6 +3099,8 @@ export function ProfileScreen({ onSubPageChange }: {
   const [subPage, setSubPage] = useState<ProfileSubPage>('none');
   const [diet, setDiet] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [inviteCard, setInviteCard] = useState<Blob | null>(null);
+  const shareText = t('share_text');
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -3103,6 +3110,14 @@ export function ProfileScreen({ onSubPageChange }: {
   useEffect(() => {
     loadDiet(d => setDiet(d));
   }, []);
+
+  // Картинка готовится заранее, пока человек на экране профиля: по нажатию кнопки её
+  // нужно только отдать — иначе платформа сочтёт системный share вызванным без жеста.
+  useEffect(() => {
+    let alive = true;
+    buildInviteCard(shareText).then((blob) => { if (alive) setInviteCard(blob); });
+    return () => { alive = false; };
+  }, [shareText]);
 
   const goToSubPage = (page: ProfileSubPage) => {
     setSubPage(page);
@@ -3114,16 +3129,16 @@ export function ProfileScreen({ onSubPageChange }: {
   };
 
   const handleShare = () => {
-    const url = encodeURIComponent('https://t.me/omnom_bot');
-    const text = encodeURIComponent(t('share_text'));
-    const tg = window.Telegram?.WebApp;
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(`https://t.me/share/url?url=${url}&text=${text}`);
-    } else {
-      navigator.clipboard?.writeText('https://t.me/omnom_bot').then(() => {
+    // Картинка несёт только заголовок; подпись к ней — заголовок + описание + ссылка,
+    // иначе получатель увидит красивое фото, но не поймёт, что это и куда перейти.
+    const text = `${shareText}\n\n${t('share_description')}\n${BOT_URL}`;
+    void shareBlob(inviteCard, text).then((outcome) => {
+      if (outcome === 'shared') return;
+      if (outcome === 'downloaded') { showToast(t('toast_share_saved')); return; }
+      navigator.clipboard?.writeText(BOT_URL).then(() => {
         showToast(t('toast_copied'));
-      }).catch(() => {});
-    }
+      }).catch(() => showToast(t('toast_share_failed')));
+    });
   };
 
   const langLabel = lang === 'uz' ? 'Ozbekcha' : 'Русский';

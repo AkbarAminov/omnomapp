@@ -118,6 +118,67 @@ export async function buildShareCard(dish: Dish, name: string, caption: string):
   }
 }
 
+// Карточка-приглашение для шеринга приложения (не привязана к конкретному блюду) —
+// маскот на кремовом фоне, а не фотография в карточке, поэтому без обрезки/рамки.
+export async function buildInviteCard(caption: string): Promise<Blob | null> {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    await (document as any).fonts?.ready;
+
+    ctx.fillStyle = CREAM;
+    ctx.fillRect(0, 0, W, H);
+
+    const slotX = 80;
+    const slotY = 430;
+    const slotW = W - slotX * 2;
+    const slotH = slotW;
+
+    const mascot = await loadImage('/assets/char-start.webp', false);
+    if (mascot && mascot.width > 0) {
+      const scale = Math.min(slotW / mascot.width, slotH / mascot.height);
+      const dw = mascot.width * scale;
+      const dh = mascot.height * scale;
+      ctx.drawImage(mascot, slotX + (slotW - dw) / 2, slotY + (slotH - dh) / 2, dw, dh);
+    } else {
+      ctx.font = '400 320px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🍽️', W / 2, slotY + slotH / 2);
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+
+    const title = layoutTitle(ctx, caption, W - 160);
+    ctx.fillStyle = BROWN;
+    let ty = slotY + slotH + 140;
+    for (const line of title.lines) {
+      ctx.fillText(line, W / 2, ty);
+      ty += title.size * 1.15;
+    }
+
+    const logo = await loadImage('/assets/logo_horizontal.svg', false);
+    if (logo && logo.width > 0) {
+      const lw = 320;
+      const lh = (logo.height / logo.width) * lw || 90;
+      ctx.drawImage(logo, (W - lw) / 2, H - 200, lw, lh);
+    } else {
+      ctx.fillStyle = ORANGE;
+      ctx.font = '900 72px Inter, sans-serif';
+      ctx.fillText('omnom', W / 2, H - 150);
+    }
+
+    return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
+  } catch {
+    return null;
+  }
+}
+
 export type ShareOutcome = 'shared' | 'downloaded' | 'failed';
 
 // Картинку готовим заранее: системный share и сохранение файла разрешены только внутри
@@ -163,7 +224,7 @@ function shareLink(caption: string): ShareOutcome {
   }
 }
 
-const BOT_URL = 'https://t.me/omnom_bot';
+export const BOT_URL = 'https://t.me/Omnomfoodbot';
 
 function save(blob: Blob): ShareOutcome {
   try {
