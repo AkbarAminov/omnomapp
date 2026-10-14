@@ -11,6 +11,7 @@ import type { BattleSession } from '../logic/battleEngine';
 import { isBattleOnboardingSeen, loadDiet, markBattleOnboardingSeen, saveSettings } from '../logic/settingsStorage';
 import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
 import { BOT_URL, buildInviteCard, buildShareCard, shareBlob } from '../logic/shareCard';
+import { trackEvent } from '../logic/metrics';
 import { openExternalLink } from '../lib/openLink';
 import { getTelegramUserInfo } from '../lib/userId';
 import { usePressScale } from '../hooks/usePressScale';
@@ -83,6 +84,14 @@ function IconShare({ color = '#6C2912' }: { color?: string }) {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <path d="M12 16V4M12 4L8 8M12 4l4 4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconClose({ color = '#6C2912' }: { color?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M6 6l12 12M18 6L6 18" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1672,6 +1681,26 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
   const startX = useRef<number | null>(null);
   const startY = useRef(0);
   const width = useRef(1);
+  // Свайп вниз закрывает шторку, но только если тянуть именно за хэндл — если разрешить его
+  // из любой точки, жест спорил бы с обычным вертикальным скроллом описания блюда.
+  const [handleDragY, setHandleDragY] = useState(0);
+  const handleStartY = useRef<number | null>(null);
+  const onHandlePointerDown = (e: React.PointerEvent) => {
+    handleStartY.current = e.clientY;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+  };
+  const onHandlePointerMove = (e: React.PointerEvent) => {
+    if (handleStartY.current === null) return;
+    const dy = e.clientY - handleStartY.current;
+    if (dy > 0) setHandleDragY(dy);
+  };
+  const onHandlePointerUp = () => {
+    if (handleStartY.current === null) return;
+    const moved = handleDragY;
+    handleStartY.current = null;
+    setHandleDragY(0);
+    if (moved > 80) onClose();
+  };
   // Решаем «это горизонтальный свайп или вертикальный скролл текста» по первому заметному
   // движению и запоминаем — иначе на каждый тик приходится сравнивать dx/dy заново, и палец,
   // слегка повело вниз, переключал бы жест туда-обратно.
@@ -1732,10 +1761,39 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
           boxShadow: '0 -12px 40px rgba(108,41,18,0.18)',
         }}
       >
-        <div style={{ width: '44px', height: '4px', borderRadius: '999px', backgroundColor: 'rgba(108,41,18,0.18)', alignSelf: 'center', flexShrink: 0 }} />
+      {/* Отдельная обёртка под жест хэндла: entrance-анимация выше трогает тот же transform,
+          что и протяжка пальцем — на одном элементе они бы конфликтовали. */}
+      <div style={{
+        display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0,
+        transform: `translateY(${handleDragY}px)`,
+        transition: handleDragY === 0 ? `transform 220ms ${EASE_OUT}` : 'none',
+      }}>
+        <div
+          style={{ position: 'relative', flexShrink: 0, padding: '2px 0 10px' }}
+          onPointerDown={onHandlePointerDown}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={onHandlePointerUp}
+          onPointerCancel={onHandlePointerUp}
+        >
+          <div style={{ width: '44px', height: '4px', borderRadius: '999px', backgroundColor: 'rgba(108,41,18,0.18)', margin: '0 auto' }} />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('btn_close')}
+            style={{
+              position: 'absolute', top: '-6px', right: PAD,
+              width: '32px', height: '32px', borderRadius: '50%',
+              backgroundColor: 'rgba(108,41,18,0.08)', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            {...usePressScale(0.9)}
+          >
+            <IconClose />
+          </button>
+        </div>
 
         <div
-          style={{ overflow: 'hidden', flex: 1, minHeight: 0, marginTop: '12px', touchAction: 'pan-y' }}
+          style={{ overflow: 'hidden', flex: 1, minHeight: 0, touchAction: 'pan-y' }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -1844,11 +1902,21 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
           >
             <IconShare />
           </button>
-          <PressButton onClick={onClose} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
-            {t('btn_close')}
+          <PressButton
+            onClick={() => {
+              const d = dishes[index];
+              haptic('medium');
+              trackEvent('dish_selected', { dish_id: d.id, rank: index + 1 });
+              setToast(t('toast_dish_selected'));
+              setTimeout(onClose, 650);
+            }}
+            bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)"
+          >
+            {t('btn_select_dish')}
           </PressButton>
         </div>
         {toast && <Toast message={toast} />}
+      </div>
       </div>
     </div>,
     document.body,

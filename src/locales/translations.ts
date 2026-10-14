@@ -83,6 +83,8 @@ const ru = {
   btn_express24:         'Express24',
   btn_yandex_eda:        'Яндекс Еда',
   btn_open_dish:         'Открыть',
+  btn_select_dish:       'Выбрать это блюдо',
+  toast_dish_selected:   'Блюдо выбрано',
 
   // ── Profile ──────────────────────────────────────────────────────────────────
   profile_title:      'Профиль',
@@ -233,6 +235,8 @@ const uz: Record<keyof typeof ru, string> = {
   btn_express24:         'Express24',
   btn_yandex_eda:        'Yandex Eda',
   btn_open_dish:         'Ochish',
+  btn_select_dish:       'Shu taomni tanlash',
+  toast_dish_selected:   'Taom tanlandi',
 
   // ── Profile ──────────────────────────────────────────────────────────────────
   profile_title:      'Profil',
