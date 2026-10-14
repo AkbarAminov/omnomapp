@@ -54,9 +54,9 @@ function IconChevronRight() {
   );
 }
 
-function IconArrowLeft() {
+function IconArrowLeft({ size = 24 }: { size?: number }) {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <path d="M19 12H5M5 12l7-7M5 12l7 7" stroke="#6C2912" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -84,14 +84,6 @@ function IconShare({ color = '#6C2912' }: { color?: string }) {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <path d="M12 16V4M12 4L8 8M12 4l4 4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14" stroke={color} strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconClose({ color = '#6C2912' }: { color?: string }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M6 6l12 12M18 6L6 18" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1232,20 +1224,12 @@ export function SingleResultScreen({
     return () => { alive = false; };
   }, [variant, dish, dishName, caption]);
 
-  // Текст-шаблон общий для обеих кнопок, ссылка добавляется по-разному: у shareLink она
-  // летит отдельным url-параметром диалога Telegram, а у shareBlob (файл) отдельного поля
-  // для ссылки нет — её нужно дописать прямо в подпись к картинке.
-  const linkText = `${caption}: ${dishName}. ${t('share_description')}`;
-
+  // Одна кнопка «Поделиться» — отправляет картинку с подписью (там же ссылка на бота: у
+  // navigator.share отдельного поля под ссылку нет). Если платформа не поддерживает отправку
+  // файла, shareBlob сама падает в диалог Telegram с голой ссылкой — см. shareCard.ts.
   const share = () => {
     haptic('light');
-    const outcome = shareLink(linkText);
-    if (outcome === 'failed') { setToast(t('toast_share_failed')); setTimeout(() => setToast(null), 2200); }
-  };
-
-  const shareImage = () => {
-    haptic('light');
-    const text = `${linkText}\n${miniAppShareUrl()}`;
+    const text = `${caption}: ${dishName}. ${t('share_description')}\n${miniAppShareUrl()}`;
     void shareBlob(card, text).then((outcome) => {
       if (outcome === 'shared') return;
       setToast(t(outcome === 'downloaded' ? 'toast_share_saved' : 'toast_share_failed'));
@@ -1412,28 +1396,12 @@ export function SingleResultScreen({
           padding: `clamp(16px, 2.6dvh, 28px) ${PAD} clamp(10px, 1.8dvh, 18px)`,
           flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={shareImage}
-              aria-label={t('btn_share_image')}
-              style={{
-                flexShrink: 0, width: 'clamp(54px, 12vw, 66px)', height: 'clamp(54px, 12vw, 66px)', borderRadius: '999px',
-                backgroundColor: '#fff', border: 'none', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
-              }}
-              {...usePressScale(0.94)}
-            >
-              <IconShare />
-            </button>
-            <PressButton onClick={share} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
-                <IconShare color="#fff" />
-                {t('btn_share_result')}
-              </span>
-            </PressButton>
-          </div>
+          <PressButton onClick={share} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+              <IconShare color="#fff" />
+              {t('btn_share_result')}
+            </span>
+          </PressButton>
           {onRetry && (
             <button
               type="button"
@@ -1465,9 +1433,6 @@ export function SingleResultScreen({
           )}
           {variant === 'quiz' && (
             <ActionCircle size="large" icon={<img src="/assets/icons/settings-share.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_share_result')} onClick={share} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
-          )}
-          {variant === 'quiz' && (
-            <ActionCircle size="large" icon={<IconShare />} label={t('btn_share_image')} onClick={shareImage} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
           )}
           {onRetry && (
             <ActionCircle size="large" icon={<img src="/assets/icons/reply-more.svg" alt="" style={{ width: '42%', height: '42%', pointerEvents: 'none' }} />} label={t('btn_retry')} onClick={onRetry} bg="#FFFBF4" shadow="0px 11px 22px rgba(0,0,0,0.11), inset 0px -4px 12px #FFEFD6" />
@@ -1797,26 +1762,26 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
         transition: handleDragY === 0 ? `transform 220ms ${EASE_OUT}` : 'none',
       }}>
         <div
-          style={{ position: 'relative', flexShrink: 0, padding: '2px 0 10px' }}
+          style={{ position: 'relative', flexShrink: 0, padding: '6px 0 10px' }}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
           onPointerUp={onHandlePointerUp}
           onPointerCancel={onHandlePointerUp}
         >
-          <div style={{ width: '44px', height: '4px', borderRadius: '999px', backgroundColor: 'rgba(108,41,18,0.18)', margin: '0 auto' }} />
           <button
             type="button"
             onClick={onClose}
-            aria-label={t('btn_close')}
             style={{
-              position: 'absolute', top: '-6px', right: PAD,
-              width: '32px', height: '32px', borderRadius: '50%',
+              marginLeft: PAD,
+              height: '32px', padding: '0 14px 0 10px', borderRadius: '999px',
               backgroundColor: 'rgba(108,41,18,0.08)', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+              fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#6C2912', fontSize: '14px',
             }}
             {...usePressScale(0.9)}
           >
-            <IconClose />
+            <IconArrowLeft size={16} />
+            {t('btn_back')}
           </button>
         </div>
 
@@ -1908,9 +1873,15 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
               const d = dishes[index];
               const name = lang === 'uz' ? (d.name_uz || d.name) : d.name;
               haptic('light');
-              const text = `${t('share_card_caption')}: ${name}. ${t('share_description')}`;
-              const outcome = shareLink(text);
-              if (outcome === 'failed') { setToast(t('toast_share_failed')); setTimeout(() => setToast(null), 2200); }
+              const caption = t('share_card_caption');
+              const text = `${caption}: ${name}. ${t('share_description')}\n${miniAppShareUrl()}`;
+              void buildShareCard(d, name, caption)
+                .then((blob) => shareBlob(blob, text))
+                .then((outcome) => {
+                  if (outcome === 'shared') return;
+                  setToast(t(outcome === 'downloaded' ? 'toast_share_saved' : 'toast_share_failed'));
+                  setTimeout(() => setToast(null), 2200);
+                });
             }}
             style={{
               flexShrink: 0, width: '56px', height: 'clamp(54px, 12vw, 66px)', borderRadius: '999px',
@@ -3134,9 +3105,20 @@ function SelectRow({ label, checked, onToggle, divider, radio = false }: {
 }
 
 export function Toast({ message }: { message: string }) {
+  // left:50% центрирует по containing block — для обычных тостов это .omnom-shell (у него
+  // transform делает его containing block для position:fixed потомков), но часть тостов
+  // рендерится из DishSheet, который сам ушёл в document.body через createPortal — там
+  // containing block уже окно браузера, а не узкая колонка на десктопе. Меряем центр
+  // .omnom-shell напрямую, чтобы тост центрировался одинаково в обоих случаях.
+  const [centerX, setCenterX] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const shell = document.querySelector('.omnom-shell');
+    if (shell) setCenterX(shell.getBoundingClientRect().left + shell.getBoundingClientRect().width / 2);
+  }, []);
   return (
     <div style={{
-      position: 'fixed', bottom: '110px', left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed', bottom: '110px',
+      left: centerX ?? '50%', transform: 'translateX(-50%)',
       backgroundColor: '#3D1A00', color: '#fff',
       padding: '10px 22px', borderRadius: '999px',
       fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: '14px',

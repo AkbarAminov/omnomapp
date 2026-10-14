@@ -137,7 +137,6 @@ const ru = {
   battle_similar:      'Похоже на твой выбор',
   battle_again:        'Сыграть ещё раз',
   btn_share_result:    'Поделиться',
-  btn_share_image:     'Отправить картинкой',
   share_card_caption:  'Мой выбор на сегодня',
   toast_share_saved:   'Картинка сохранена',
   toast_share_failed:  'Не получилось поделиться',
@@ -146,7 +145,6 @@ const ru = {
 
   // ── Common ───────────────────────────────────────────────────────────────────
   btn_apply:    'Применить',
-  btn_close:    'Закрыть',
   btn_cancel:   'Отмена',
   toast_copied: 'Ссылка скопирована',
   toast_soon:   'Скоро',
@@ -290,7 +288,6 @@ const uz: Record<keyof typeof ru, string> = {
   battle_similar:      'Tanlovingizga o‘xshash',
   battle_again:        "Yana o'ynash",
   btn_share_result:    'Ulashish',
-  btn_share_image:     'Rasm sifatida yuborish',
   share_card_caption:  'Bugungi tanlovim',
   toast_share_saved:   'Rasm saqlandi',
   toast_share_failed:  "Ulashib bo'lmadi",
@@ -299,7 +296,6 @@ const uz: Record<keyof typeof ru, string> = {
 
   // ── Common ───────────────────────────────────────────────────────────────────
   btn_apply:    "Qo'llash",
-  btn_close:    'Yopish',
   btn_cancel:   'Bekor qilish',
   toast_copied: 'Havola nusxalandi',
   toast_soon:   'Tez orada',
