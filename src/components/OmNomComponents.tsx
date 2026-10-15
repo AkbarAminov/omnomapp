@@ -1764,31 +1764,15 @@ function DishSheet({ dishes, index, onIndex, onClose, selectable = true }: {
         transform: `translateY(${handleDragY}px)`,
         transition: handleDragY === 0 ? `transform 220ms ${EASE_OUT}` : 'none',
       }}>
+        {/* Пустая зона под жест хэндла — отдельной кнопки «Назад» тут больше нет (дублировала
+            нижний ряд), закрыть можно свайпом вниз, тапом по фону или нижней кнопкой. */}
         <div
-          style={{ position: 'relative', flexShrink: 0, padding: '6px 0 10px' }}
+          style={{ flexShrink: 0, padding: '10px 0 4px' }}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
           onPointerUp={onHandlePointerUp}
           onPointerCancel={onHandlePointerUp}
-        >
-          {selectable && (
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                marginLeft: PAD,
-                height: '32px', padding: '0 14px 0 10px', borderRadius: '999px',
-                backgroundColor: 'rgba(108,41,18,0.08)', border: 'none', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#6C2912', fontSize: '14px',
-              }}
-              {...usePressScale(0.9)}
-            >
-              <IconArrowLeft size={16} />
-              {t('btn_back')}
-            </button>
-          )}
-        </div>
+        />
 
         <div
           style={{ overflow: 'hidden', flex: 1, minHeight: 0, touchAction: 'pan-y' }}
