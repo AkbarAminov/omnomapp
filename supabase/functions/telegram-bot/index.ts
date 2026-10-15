@@ -46,17 +46,22 @@ const DONATE_INTRO = 'Если нравится OMNOM — можно подде�
 const DONATE_THANKS = 'Спасибо за поддержку! ⭐';
 const DONATE_AMOUNTS = [50, 100, 250, 500];
 
-// Mini App ничем не управляет здесь — просто дописываем метку источника в URL кнопки.
-function miniAppUrl(): string {
-  return MINIAPP_URL + (MINIAPP_URL.includes('?') ? '&' : '?') + 'src=bot';
+// Метка источника уезжает в query Mini App, оттуда main.tsx кладёт её в app_sessions.source.
+// Аргумент /start (t.me/Omnomfoodbot?start=channel → «/start channel») пробрасывается сюда,
+// поэтому ссылку в канале достаточно опубликовать с ?start=<метка>, и приход будет виден.
+// Пускаем только безопасные символы: метка уходит в URL и в базу.
+function miniAppUrl(source = 'bot'): string {
+  const safe = /^[a-zA-Z0-9_-]{1,32}$/.test(source) ? source : 'bot';
+  return MINIAPP_URL + (MINIAPP_URL.includes('?') ? '&' : '?') + `src=${safe}`;
 }
 
-const PICK_DISH_BTN = { text: '📱 Подобрать блюдо', web_app: { url: miniAppUrl() } };
+const pickDishBtn = (source?: string) => ({ text: '📱 Подобрать блюдо', web_app: { url: miniAppUrl(source) } });
+const PICK_DISH_BTN = pickDishBtn();
 const BACK_BTN = { text: '⬅️ Назад', callback_data: 'start' };
 
-const startKeyboard = () => ({
+const startKeyboard = (source?: string) => ({
   inline_keyboard: [
-    [PICK_DISH_BTN],
+    [pickDishBtn(source)],
     [{ text: '💬 Посмотреть все команды', callback_data: 'cmds' }],
     [{ text: '✉️ Написать автору', callback_data: 'feedback' }],
     [{ text: '⭐ Поддержать проект', callback_data: 'donate' }],
@@ -180,10 +185,13 @@ async function handleMessage(msg: TgMessage): Promise<void> {
   const text = (msg.text ?? '').trim();
   // В группах команды приходят как "/start@OmnomBot" — отрезаем @username и аргументы.
   const command = text.startsWith('/') ? text.split(/[\s@]/)[0] : '';
+  // «/start channel» — аргумент диплинка t.me/Omnomfoodbot?start=channel: это и есть метка
+  // источника, её надо донести до Mini App, иначе непонятно, откуда пришёл человек.
+  const startArg = text.startsWith('/start') ? text.split(/\s+/)[1] : undefined;
 
   switch (command) {
     case '/start':
-      await sendMessage(chatId, START_TEXT, startKeyboard());
+      await sendMessage(chatId, START_TEXT, startKeyboard(startArg));
       return;
     case '/help':
       await sendMessage(chatId, HELP_TEXT, helpKeyboard());

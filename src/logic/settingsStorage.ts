@@ -23,14 +23,24 @@ export function loadSettings(): Promise<Settings> {
   return settingsPromise;
 }
 
-export async function saveSettings(lang: string, allergens: string[]): Promise<void> {
+// Возвращает, доехала ли запись: раньше ошибка глушилась пустым catch, и по пустой таблице
+// user_settings нельзя было понять — никто не сохранял настройки или запись молча падала.
+export async function saveSettings(lang: string, allergens: string[]): Promise<boolean> {
   settingsPromise = Promise.resolve({ lang, allergens });
   try {
-    await supabase.from('user_settings').upsert(
+    const { error } = await supabase.from('user_settings').upsert(
       { user_id: getUserId(), lang, allergens, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' }
     );
-  } catch {}
+    if (error) {
+      console.warn('[OmNom] user_settings upsert failed:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[OmNom] user_settings upsert exception:', e);
+    return false;
+  }
 }
 
 // Туториалы (общий по приложению + «Или / Или») показываются один раз каждый. Храним флаг

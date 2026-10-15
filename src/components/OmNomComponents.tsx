@@ -10,6 +10,7 @@ import { affinity, canPlay, createBattleSession, registerChoice } from '../logic
 import type { BattleSession } from '../logic/battleEngine';
 import { isBattleOnboardingSeen, loadDiet, markBattleOnboardingSeen, saveSettings } from '../logic/settingsStorage';
 import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
+import { trackEvent } from '../logic/metrics';
 import { buildShareCard, miniAppShareUrl, shareBlob, shareLink } from '../logic/shareCard';
 import { openExternalLink } from '../lib/openLink';
 import { getTelegramUserInfo } from '../lib/userId';
@@ -3183,6 +3184,16 @@ export function ProfileScreen({ onSubPageChange }: {
     }).catch(() => showToast(t('toast_share_failed')));
   };
 
+  // Сохранение настроек теперь сообщает, доехало ли оно: факт записи виден в аналитике,
+  // а провал — пользователю тостом, вместо прежнего молчаливого catch.
+  const applySettings = () => {
+    void saveSettings(lang, diet).then((ok) => {
+      trackEvent('settings_saved', { lang, allergens: diet.length, ok });
+      if (!ok) showToast(t('toast_save_failed'));
+    });
+    goToSubPage('none');
+  };
+
   const langLabel = lang === 'uz' ? 'Ozbekcha' : 'Русский';
 
   return (
@@ -3219,6 +3230,9 @@ export function ProfileScreen({ onSubPageChange }: {
                       key={item.id}
                       type="button"
                       onClick={() => {
+                        // Экраны профиля не были размечены вообще: по пустой user_settings
+                        // нельзя было отличить «никто не заходил» от «запись падает».
+                        trackEvent('profile_item_tapped', { item: item.id });
                         if (item.id === 'diet') goToSubPage('diet');
                         else if (item.id === 'lang') goToSubPage('language');
                         else if (item.id === 'share') handleShare();
@@ -3267,7 +3281,7 @@ export function ProfileScreen({ onSubPageChange }: {
               ))}
             </div>
             <div style={{ flexShrink: 0, padding: `12px ${PAD} calc(12px + env(safe-area-inset-bottom, 0px))` }}>
-              <PressButton onClick={() => { saveSettings(lang, diet); goToSubPage('none'); }} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
+              <PressButton onClick={applySettings} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
                 {t('btn_apply')}
               </PressButton>
             </div>
@@ -3291,7 +3305,7 @@ export function ProfileScreen({ onSubPageChange }: {
               ))}
             </div>
             <div style={{ flexShrink: 0, padding: `12px ${PAD} calc(12px + env(safe-area-inset-bottom, 0px))` }}>
-              <PressButton onClick={() => { saveSettings(lang, diet); goToSubPage('none'); }} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
+              <PressButton onClick={applySettings} bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.38), inset 0px -4px 12px rgba(0,0,0,0.15)">
                 {t('btn_apply')}
               </PressButton>
             </div>

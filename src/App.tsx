@@ -155,9 +155,11 @@ function OmNomApp() {
   };
 
   // A quiz still on screen when state is reset was left unfinished, whatever path got us here.
+  // quizIdRef служит и защёлкой: один тест засчитывается брошенным ровно один раз, даже если
+  // сюда зайдут дважды (уход со страницы + следующий resetState).
   const abandonIfRunning = () => {
     const view = quizRef.current;
-    if (!view) return;
+    if (!view || !quizIdRef.current) return;
     track('test_abandoned', {
       session_id: quizIdRef.current,
       mode: view.session.mode,
@@ -178,6 +180,28 @@ function OmNomApp() {
     setAllCuisineResults(null);
     flushEvents();
   };
+
+  // Оба события раньше возникали только при переходах внутри приложения, а самый частый
+  // сценарий — просто закрыть мини-апп посреди теста или прямо на результате — не давал
+  // ничего: test_abandoned не набралось ни одного за всё время, а ответы доезжали лишь у
+  // 78% завершённых тестов. Очереди analytics/metrics свои обработчики уже имеют, но здесь
+  // событие и строки ответов ещё даже не созданы — их нужно породить до ухода страницы.
+  useEffect(() => {
+    const salvage = () => {
+      abandonIfRunning();
+      flushSessionAnswers();
+      flushEvents();
+    };
+    const onHidden = () => { if (document.visibilityState === 'hidden') salvage(); };
+    document.addEventListener('visibilitychange', onHidden);
+    window.addEventListener('pagehide', salvage);
+    return () => {
+      document.removeEventListener('visibilitychange', onHidden);
+      window.removeEventListener('pagehide', salvage);
+    };
+    // Всё нужное лежит в ref-ах, поэтому вешаем слушатели один раз за жизнь приложения.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Результат готов ещё до этого экрана — пауза нужна только чтобы выдача не выпрыгивала из-под
   // пальца. Раньше она занимала почти пять секунд, то есть дольше, чем весь тест из шести
