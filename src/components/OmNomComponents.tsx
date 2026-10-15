@@ -1665,8 +1665,11 @@ function ResultCard({ dish, highlighted, onOpen }: {
 // Пять вариантов можно пролистать, не закрывая просмотр: закрыть → открыть другую карточку —
 // это не просмотр меню, а хождение по экранам.
 
-function DishSheet({ dishes, index, onIndex, onClose }: {
+function DishSheet({ dishes, index, onIndex, onClose, selectable = true }: {
   dishes: MatchedDish[]; index: number; onIndex(i: number): void; onClose(): void;
+  // История — это уже сделанные выборы; «выбрать это блюдо» там не имеет смысла, и кнопка
+  // внизу сама становится «Назад» (верхнюю тогда убираем — незачем дублировать).
+  selectable?: boolean;
 }) {
   const { lang, t } = useLang();
   const [toast, setToast] = useState<string | null>(null);
@@ -1768,21 +1771,23 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
           onPointerUp={onHandlePointerUp}
           onPointerCancel={onHandlePointerUp}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              marginLeft: PAD,
-              height: '32px', padding: '0 14px 0 10px', borderRadius: '999px',
-              backgroundColor: 'rgba(108,41,18,0.08)', border: 'none', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: '4px',
-              fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#6C2912', fontSize: '14px',
-            }}
-            {...usePressScale(0.9)}
-          >
-            <IconArrowLeft size={16} />
-            {t('btn_back')}
-          </button>
+          {selectable && (
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                marginLeft: PAD,
+                height: '32px', padding: '0 14px 0 10px', borderRadius: '999px',
+                backgroundColor: 'rgba(108,41,18,0.08)', border: 'none', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#6C2912', fontSize: '14px',
+              }}
+              {...usePressScale(0.9)}
+            >
+              <IconArrowLeft size={16} />
+              {t('btn_back')}
+            </button>
+          )}
         </div>
 
         <div
@@ -1895,18 +1900,24 @@ function DishSheet({ dishes, index, onIndex, onClose }: {
           >
             <IconShare />
           </button>
-          <PressButton
-            onClick={() => {
-              const d = dishes[index];
-              haptic('medium');
-              trackEvent('dish_selected', { dish_id: d.id, rank: index + 1 });
-              setToast(t('toast_dish_selected'));
-              setTimeout(onClose, 650);
-            }}
-            bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)"
-          >
-            {t('btn_select_dish')}
-          </PressButton>
+          {selectable ? (
+            <PressButton
+              onClick={() => {
+                const d = dishes[index];
+                haptic('medium');
+                trackEvent('dish_selected', { dish_id: d.id, rank: index + 1 });
+                setToast(t('toast_dish_selected'));
+                setTimeout(onClose, 650);
+              }}
+              bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)"
+            >
+              {t('btn_select_dish')}
+            </PressButton>
+          ) : (
+            <PressButton onClick={onClose} bg="#6C2912" color="#FFF1DC" shadow="inset 0px -4px 12px rgba(0,0,0,0.2)">
+              {t('btn_back')}
+            </PressButton>
+          )}
         </div>
         {toast && <Toast message={toast} />}
       </div>
@@ -2793,7 +2804,7 @@ export function HistoryScreen({ history, dishById, onClearHistory }: {
       )}
 
       {openIndex !== null && openable.length > 0 && (
-        <DishSheet dishes={openable} index={openIndex} onIndex={setOpenIndex} onClose={() => setOpenIndex(null)} />
+        <DishSheet dishes={openable} index={openIndex} onIndex={setOpenIndex} onClose={() => setOpenIndex(null)} selectable={false} />
       )}
 
       {confirming && (
@@ -3105,27 +3116,26 @@ function SelectRow({ label, checked, onToggle, divider, radio = false }: {
 }
 
 export function Toast({ message }: { message: string }) {
-  // left:50% центрирует по containing block — для обычных тостов это .omnom-shell (у него
-  // transform делает его containing block для position:fixed потомков), но часть тостов
-  // рендерится из DishSheet, который сам ушёл в document.body через createPortal — там
-  // containing block уже окно браузера, а не узкая колонка на десктопе. Меряем центр
-  // .omnom-shell напрямую, чтобы тост центрировался одинаково в обоих случаях.
-  const [centerX, setCenterX] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    const shell = document.querySelector('.omnom-shell');
-    if (shell) setCenterX(shell.getBoundingClientRect().left + shell.getBoundingClientRect().width / 2);
-  }, []);
+  // Обёртка на всю ширину containing block + flex-центрирование внутри — вместо
+  // left:50%/translateX(-50%) на самом пузыре. Раньше число тостов (которые рендерятся
+  // из DishSheet, ушедшего в document.body через createPortal) центрировались не по
+  // .omnom-shell, а мимо него; растягивать на 100% и центрировать содержимое флексом
+  // не зависит от того, где именно заканчивается containing block.
   return (
     <div style={{
-      position: 'fixed', bottom: '110px',
-      left: centerX ?? '50%', transform: 'translateX(-50%)',
-      backgroundColor: '#3D1A00', color: '#fff',
-      padding: '10px 22px', borderRadius: '999px',
-      fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: '14px',
-      zIndex: 1000, pointerEvents: 'none', whiteSpace: 'nowrap',
-      animation: 'screenFadeIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both',
+      position: 'fixed', bottom: '110px', left: 0, right: 0,
+      display: 'flex', justifyContent: 'center',
+      zIndex: 1000, pointerEvents: 'none',
     }}>
-      {message}
+      <div style={{
+        backgroundColor: '#3D1A00', color: '#fff',
+        padding: '10px 22px', borderRadius: '999px',
+        fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: '14px',
+        whiteSpace: 'nowrap',
+        animation: 'screenFadeIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both',
+      }}>
+        {message}
+      </div>
     </div>
   );
 }
@@ -3235,6 +3245,10 @@ export function ProfileScreen({ onSubPageChange }: {
               <ProfileUser />
               <div>
                 {PROFILE_ITEMS.map((item, i) => {
+                  // Не ведёт никуда, в отличие от остальных строк — тап просто показывает
+                  // тост «Скоро». Шеврон (он обещает переход) и полная яркость текста тут
+                  // были бы враньём, но строка не disabled: тап всё равно работает.
+                  const isNotify = item.id === 'notify';
                   return (
                     <button
                       key={item.id}
@@ -3251,7 +3265,7 @@ export function ProfileScreen({ onSubPageChange }: {
                         background: 'none', border: 'none',
                         borderBottom: i < PROFILE_ITEMS.length - 1 ? DIVIDER : 'none',
                         cursor: 'pointer',
-                        textAlign: 'left',
+                        textAlign: 'left', opacity: isNotify ? 0.6 : 1,
                       }}
                     >
                       <img src={item.icon} alt="" style={{ width: '22px', height: '22px', flexShrink: 0, objectFit: 'contain' }} />
@@ -3263,7 +3277,7 @@ export function ProfileScreen({ onSubPageChange }: {
                           {langLabel}
                         </span>
                       )}
-                      <IconChevronRight />
+                      {!isNotify && <IconChevronRight />}
                     </button>
                   );
                 })}
