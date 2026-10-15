@@ -11,7 +11,6 @@ import type { BattleSession } from '../logic/battleEngine';
 import { isBattleOnboardingSeen, loadDiet, markBattleOnboardingSeen, saveSettings } from '../logic/settingsStorage';
 import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
 import { buildShareCard, miniAppShareUrl, shareBlob, shareLink } from '../logic/shareCard';
-import { trackEvent } from '../logic/metrics';
 import { openExternalLink } from '../lib/openLink';
 import { getTelegramUserInfo } from '../lib/userId';
 import { usePressScale } from '../hooks/usePressScale';
@@ -1665,11 +1664,8 @@ function ResultCard({ dish, highlighted, onOpen }: {
 // Пять вариантов можно пролистать, не закрывая просмотр: закрыть → открыть другую карточку —
 // это не просмотр меню, а хождение по экранам.
 
-function DishSheet({ dishes, index, onIndex, onClose, selectable = true }: {
+function DishSheet({ dishes, index, onIndex, onClose }: {
   dishes: MatchedDish[]; index: number; onIndex(i: number): void; onClose(): void;
-  // История — это уже сделанные выборы; «выбрать это блюдо» там не имеет смысла, и кнопка
-  // внизу сама становится «Назад» (верхнюю тогда убираем — незачем дублировать).
-  selectable?: boolean;
 }) {
   const { lang, t } = useLang();
   const [toast, setToast] = useState<string | null>(null);
@@ -1884,24 +1880,9 @@ function DishSheet({ dishes, index, onIndex, onClose, selectable = true }: {
           >
             <IconShare />
           </button>
-          {selectable ? (
-            <PressButton
-              onClick={() => {
-                const d = dishes[index];
-                haptic('medium');
-                trackEvent('dish_selected', { dish_id: d.id, rank: index + 1 });
-                setToast(t('toast_dish_selected'));
-                setTimeout(onClose, 650);
-              }}
-              bg="#F48924" color="#fff" shadow="0 12px 28px rgba(244,137,36,0.32)"
-            >
-              {t('btn_select_dish')}
-            </PressButton>
-          ) : (
-            <PressButton onClick={onClose} bg="#6C2912" color="#FFF1DC" shadow="inset 0px -4px 12px rgba(0,0,0,0.2)">
-              {t('btn_back')}
-            </PressButton>
-          )}
+          <PressButton onClick={onClose} bg="#6C2912" color="#FFF1DC" shadow="inset 0px -4px 12px rgba(0,0,0,0.2)">
+            {t('btn_back')}
+          </PressButton>
         </div>
         {toast && <Toast message={toast} />}
       </div>
@@ -2788,7 +2769,7 @@ export function HistoryScreen({ history, dishById, onClearHistory }: {
       )}
 
       {openIndex !== null && openable.length > 0 && (
-        <DishSheet dishes={openable} index={openIndex} onIndex={setOpenIndex} onClose={() => setOpenIndex(null)} selectable={false} />
+        <DishSheet dishes={openable} index={openIndex} onIndex={setOpenIndex} onClose={() => setOpenIndex(null)} />
       )}
 
       {confirming && (
