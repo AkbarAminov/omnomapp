@@ -41,7 +41,7 @@ import { flush as flushEvents, track } from './logic/analytics';
 import { AppData, loadData } from './logic/dataStore';
 import { clearHistory, formatDate, HistoryItem, HistoryMode, loadHistory, saveHistoryItem } from './logic/historyStorage';
 import { trackEvent } from './logic/metrics';
-import { buildSessionRows, newSessionId, saveSessionAnswers } from './logic/sessionAnswers';
+import { buildSessionRows, Feedback, newSessionId, saveSessionAnswers } from './logic/sessionAnswers';
 import { isAppOnboardingSeen, loadSettings, markAppOnboardingSeen } from './logic/settingsStorage';
 import { LangProvider } from './locales/LangContext';
 
@@ -97,6 +97,10 @@ function OmNomApp() {
   const quizStartedAtRef = useRef(0);
   const questionShownAtRef = useRef(0);
   const pendingAnswersRef = useRef<{ id: string; session: Session; guessedDishId: string } | null>(null);
+  // Set by the 👍/👎 tap on the result screen (quiz variant only), read once when the
+  // session's answers are flushed — was hardcoded to null, which is why target_dish_id
+  // was 0/556 in session_answers and USE_CALIBRATED could never turn on real signal.
+  const resultFeedbackRef = useRef<Feedback | null>(null);
   const rejectedIdsRef = useRef<string[]>([]);
   const nearEndRef = useRef(false);
   const loadingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -151,7 +155,9 @@ function OmNomApp() {
     const pending = pendingAnswersRef.current;
     if (!pending) return;
     pendingAnswersRef.current = null;
-    saveSessionAnswers(buildSessionRows(pending.id, pending.session, pending.guessedDishId, null));
+    const feedback = resultFeedbackRef.current;
+    resultFeedbackRef.current = null;
+    saveSessionAnswers(buildSessionRows(pending.id, pending.session, pending.guessedDishId, feedback));
   };
 
   // A quiz still on screen when state is reset was left unfinished, whatever path got us here.
@@ -267,6 +273,7 @@ function OmNomApp() {
     setExactMatch(own.exact);
     setAllCuisineResults(all.length > 0 ? all : null);
     pendingAnswersRef.current = { id: sessionId ?? newSessionId(), session, guessedDishId: top[0].id };
+    resultFeedbackRef.current = null;
     addToHistory(top[0], session.mode, top[0].matchPercent, 1);
     // Экран результата появится только после runLoading() (~1.5с) — греем фото топ-5, пока
     // крутится прогресс, чтобы они уже были в кэше к моменту показа.
@@ -544,11 +551,18 @@ function OmNomApp() {
           setFlowScreen('results');
         } : undefined}
         onGoHome={handleGoHome}
-        onFeedback={resultVariant === 'quiz' ? (value) => trackEvent('result_feedback', {
-          value,
-          dish_id: results[0]?.id ?? null,
-          session_id: pendingAnswersRef.current?.id ?? null,
-        }) : undefined}
+        onFeedback={resultVariant === 'quiz' ? (value) => {
+          // 'down' leaves targetDishId null rather than marking the shown dish wrong: there is
+          // no follow-up search step to learn what the player actually wanted, and this engine
+          // treats absence of signal as unknown, not as a negative (see the isHot/«Тартар»
+          // precedent in project memory) — calibration only learns from confirmed matches.
+          resultFeedbackRef.current = { guessed: value === 'up', targetDishId: null };
+          trackEvent('result_feedback', {
+            value,
+            dish_id: results[0]?.id ?? null,
+            session_id: pendingAnswersRef.current?.id ?? null,
+          });
+        } : undefined}
       />
     );
   } else if (flowScreen === 'results') {
