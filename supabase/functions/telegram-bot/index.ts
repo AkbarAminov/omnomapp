@@ -30,6 +30,12 @@ const admin = createClient(
 // ── Тексты и клавиатуры — ровно как в ТЗ ───────────────────────────────────────
 const START_TEXT = 'Привет! Я OMNOM 🍽 Помогу решить, что поесть, за минуту. Жми кнопку ниже 👇';
 
+// Про напоминание предупреждаем сразу: оно включено по умолчанию, и человек должен узнать
+// про ежедневные сообщения здесь, а не из первого же сообщения в 12:45. Тем, кто уже
+// выключил, строку не показываем — она противоречила бы кнопке «🔔 Напоминать раз в день».
+const startText = (subscribed: boolean) =>
+  subscribed ? `${START_TEXT}\n\nРаз в день напомню про обед. Не нужно — выключи кнопкой 🔕 ниже.` : START_TEXT;
+
 const HELP_TEXT = `OMNOM подбирает блюдо под настроение.
 
 /start: открыть приложение
@@ -234,10 +240,12 @@ async function handleMessage(msg: TgMessage): Promise<void> {
   const startArg = text.startsWith('/start') ? text.split(/\s+/)[1] : undefined;
 
   switch (command) {
-    case '/start':
+    case '/start': {
       await ensureSubscribed(chatId);
-      await sendMessage(chatId, START_TEXT, startKeyboard(await isSubscribed(chatId), startArg));
+      const subscribed = await isSubscribed(chatId);
+      await sendMessage(chatId, startText(subscribed), startKeyboard(subscribed, startArg));
       return;
+    }
     case '/help':
       await sendMessage(chatId, HELP_TEXT, helpKeyboard());
       return;
@@ -272,7 +280,8 @@ async function handleCallback(cb: TgCallbackQuery): Promise<void> {
   if (!chatId) return;
 
   if (cb.data === 'start') {
-    await sendMessage(chatId, START_TEXT, startKeyboard(await isSubscribed(chatId)));
+    const subscribed = await isSubscribed(chatId);
+    await sendMessage(chatId, startText(subscribed), startKeyboard(subscribed));
   } else if (cb.data === 'cmds') {
     await sendMessage(chatId, HELP_TEXT, helpKeyboard());
   } else if (cb.data === 'feedback') {
