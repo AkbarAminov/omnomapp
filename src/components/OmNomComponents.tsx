@@ -9,10 +9,8 @@ import { HistoryItem, HistoryMode } from '../logic/historyStorage';
 import { affinity, canPlay, createBattleSession, registerChoice } from '../logic/battleEngine';
 import type { BattleSession } from '../logic/battleEngine';
 import { isBattleOnboardingSeen, loadDiet, markBattleOnboardingSeen, saveSettings } from '../logic/settingsStorage';
-import { isSafeUrl, type Place, type PlaceOffer } from '../logic/places';
 import { trackEvent } from '../logic/metrics';
 import { buildShareCard, miniAppShareUrl, shareBlob, shareLink } from '../logic/shareCard';
-import { openExternalLink } from '../lib/openLink';
 import { getTelegramUserInfo } from '../lib/userId';
 import { usePressScale } from '../hooks/usePressScale';
 import { useLang } from '../locales/LangContext';
@@ -138,18 +136,6 @@ export function OmNomLogo({ stacked = false }: { stacked?: boolean }) {
           height: 'auto', display: 'block',
         }}
       />
-    </div>
-  );
-}
-
-export function ProgressBar({ progress }: { progress: number }) {
-  const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
-  return (
-    <div style={{ height: '6px', borderRadius: '999px', backgroundColor: '#E5CDA5', overflow: 'hidden' }}>
-      <div style={{
-        height: '100%', width: `${pct}%`, borderRadius: '999px', backgroundColor: '#F48924',
-        transition: 'width 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
-      }} />
     </div>
   );
 }
@@ -2840,152 +2826,6 @@ function ConfirmSheet({ title, subtitle, confirmLabel, cancelLabel, onConfirm, o
       </div>
     </div>,
     document.body,
-  );
-}
-
-// ─── Places («Локации») and «Что рядом?» ─────────────────────────────────────
-
-function formatPrice(price: number, currency: string): string {
-  return `${new Intl.NumberFormat('ru-RU').format(price)} ${currency}`;
-}
-
-function LinkPill({ label, url, primary = false }: { label: string; url: string; primary?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={() => openExternalLink(url)}
-      style={{
-        flex: 1, minWidth: 0, height: '40px', borderRadius: '999px', border: 'none', cursor: 'pointer',
-        backgroundColor: primary ? '#F48924' : '#FFF1DD', color: primary ? '#fff' : '#6C2912',
-        fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 'clamp(12px, 3.3vw, 14px)',
-        transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
-      }}
-      {...usePressScale(0.95)}
-    >
-      {label}
-    </button>
-  );
-}
-
-function PlaceCard({ place, price, dishUrl }: { place: Place; price?: number | null; dishUrl?: string }) {
-  const { t } = useLang();
-  const links = [
-    dishUrl && isSafeUrl(dishUrl) ? { label: t('btn_open_dish'), url: dishUrl } : null,
-    isSafeUrl(place.express24_url) ? { label: t('btn_express24'), url: place.express24_url } : null,
-    isSafeUrl(place.yandex_eda_url) ? { label: t('btn_yandex_eda'), url: place.yandex_eda_url } : null,
-  ].filter((l): l is { label: string; url: string } => !!l);
-  return (
-    <div style={{ borderRadius: '25px', backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(149,104,33,0.09)', padding: 'clamp(14px, 4vw, 18px)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' }}>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(16px, 4.4vw, 19px)', letterSpacing: '-0.01em', minWidth: 0 }}>
-          {place.name}
-        </div>
-        {price != null && (
-          <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#F48924', fontSize: 'clamp(14px, 3.8vw, 16px)', whiteSpace: 'nowrap' }}>
-            {formatPrice(price, t('price_currency'))}
-          </div>
-        )}
-      </div>
-      {(place.district || place.address) && (
-        <div style={{ fontFamily: 'Inter, sans-serif', color: '#6C2912', opacity: 0.65, fontSize: 'clamp(12px, 3.3vw, 14px)', lineHeight: 1.35 }}>
-          {[place.district, place.address].filter(Boolean).join(' · ')}
-        </div>
-      )}
-      {links.length > 0 && (
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {links.map((l, i) => <LinkPill key={l.url} label={l.label} url={l.url} primary={i === 0} />)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EmptyPlaces({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: `0 ${PAD} 40px`, textAlign: 'center' }}>
-      <img
-        src="/assets/location.png"
-        alt=""
-        style={{ width: 'clamp(150px, 45vw, 200px)', height: 'auto', objectFit: 'contain' }}
-        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-      />
-      <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912', fontSize: 'clamp(22px, 6vw, 28px)', letterSpacing: '-0.02em', marginTop: 'clamp(16px, 3dvh, 28px)', lineHeight: 1.2 }}>
-        {title}
-      </h2>
-      <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.6, fontSize: 'clamp(13px, 3.5vw, 16px)', marginTop: '10px', lineHeight: 1.4 }}>
-        {subtitle}
-      </p>
-    </div>
-  );
-}
-
-export function MapScreen({ places }: { places: readonly Place[] }) {
-  const { t } = useLang();
-  return (
-    <Screen>
-      <div style={{ padding: `clamp(20px, 4dvh, 32px) ${PAD} 0`, flexShrink: 0, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'clamp(12px, 2.5dvh, 20px)' }}>
-          <OmNomLogo />
-        </div>
-        {places.length > 0 && (
-          <h2 style={SCREEN_TITLE}>
-            {t('map_title')}
-          </h2>
-        )}
-      </div>
-      {places.length === 0 ? (
-        <div style={{
-          flex: 1,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          padding: `0 ${PAD} clamp(0px, 0dvh, 80px)`,
-          gap: 0,
-        }}>
-          <img
-            src="/assets/location.png"
-            alt=""
-            style={{ width: 'clamp(160px, 50vw, 220px)', height: 'auto', objectFit: 'contain' }}
-          />
-          <h2 style={{
-            fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#6C2912',
-            fontSize: 'clamp(30px, 8.5vw, 42px)', letterSpacing: '-0.02em',
-            textAlign: 'center', marginTop: 'clamp(20px, 4dvh, 36px)', marginBottom: 0,
-          }}>
-            {t('places_empty_title')}
-          </h2>
-          <p style={{
-            fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#6C2912', opacity: 0.6,
-            fontSize: 'clamp(13px, 3.5vw, 16px)', textAlign: 'center',
-            marginTop: 'clamp(8px, 1.5dvh, 12px)',
-          }}>
-            {t('places_empty_subtitle')}
-          </p>
-        </div>
-      ) : (
-        <div style={{ flex: 1, overflowY: 'auto', padding: `12px ${PAD} 16px`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {places.map((p) => <PlaceCard key={p.id} place={p} />)}
-        </div>
-      )}
-    </Screen>
-  );
-}
-
-export function NearbyScreen({ dish, offers, onBack }: { dish: Dish; offers: readonly PlaceOffer[]; onBack(): void }) {
-  const { t, lang } = useLang();
-  const dishName = lang === 'uz' ? dish.name_uz || dish.name : dish.name;
-  return (
-    <Screen>
-      <SubPageHeader title={t('nearby_title')} onBack={onBack} />
-      <div style={{ padding: `8px ${PAD} 0`, fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#6C2912', opacity: 0.7, fontSize: 'clamp(14px, 3.8vw, 16px)' }}>
-        {dish.emoji} {dishName}
-      </div>
-      {offers.length === 0 ? (
-        <EmptyPlaces title={t('nearby_empty_title')} subtitle={t('nearby_empty_subtitle')} />
-      ) : (
-        <div style={{ flex: 1, overflowY: 'auto', padding: `16px ${PAD}`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {offers.map((o) => <PlaceCard key={o.place.id} place={o.place} price={o.price} dishUrl={o.url} />)}
-        </div>
-      )}
-    </Screen>
   );
 }
 

@@ -45,7 +45,6 @@ const ru = {
   result_match_label: 'Подходит на',
   result_no_exact:    'Точного совпадения нет',
   tab_all_cuisines:   'Все кухни',
-  btn_nearby:         'Что рядом?',
   btn_retry:          'Заново',
   btn_all_results:    'Все варианты',
   btn_back:           'Назад',
@@ -56,33 +55,17 @@ const ru = {
   results_title:       'Тебе подойдёт',
   results_subtitle:    'ИИ подобрал по твоим свайпам',
   results_match_label: 'Подходит на',
-  btn_nearby_list:     'Что есть рядом?',
   btn_view_history:    'Посмотреть историю',
   tab_this_cuisine:    'Эта кухня',
 
   // ── History ──────────────────────────────────────────────────────────────────
   history_title:          'Прошлые поиски',
   history_empty_title:    'Здесь появятся\nтвои прошлые поиски',
-  history_empty_subtitle: 'Пройди квиз и сохрани любимое блюдо',
   history_mode_meal:    'Плотно поесть',
   history_mode_snack:   'Перекус',
   history_mode_dessert: 'Сладкое',
   history_mode_random:  'Рандомайзер',
   history_mode_battle:  'Дуэль',
-
-  // ── Map ──────────────────────────────────────────────────────────────────────
-  map_title:    'Заведения',
-  places_empty_title:    'Что близко?',
-  places_empty_subtitle: 'Эта функция в процессе разработки!',
-
-  // ── Nearby («Что рядом?») ─────────────────────────────────────────────────────
-  nearby_title:          'Где поесть',
-  nearby_empty_title:    'Пока не знаем, где подают это блюдо',
-  nearby_empty_subtitle: 'Мы добавляем заведения — загляни чуть позже',
-  price_currency:        'сум',
-  btn_express24:         'Express24',
-  btn_yandex_eda:        'Яндекс Еда',
-  btn_open_dish:         'Открыть',
 
   // ── Profile ──────────────────────────────────────────────────────────────────
   profile_title:      'Профиль',
@@ -95,7 +78,6 @@ const ru = {
   clear_history_confirm_title:    'Очистить всю историю?',
   clear_history_confirm_subtitle: 'Это действие нельзя отменить — все блюда, что попадались раньше, исчезнут из списка.',
   btn_clear_history:  'Очистить',
-  history_cleared_toast: 'История очищена',
 
   // ── Diet options ─────────────────────────────────────────────────────────────
   diet_gluten:  'Глютен',
@@ -128,8 +110,6 @@ const ru = {
   battle_or:           'или',
   battle_reject:       'сегодня нет',
   battle_final:        'Финал',
-  battle_result_title: 'Твой выбор на сегодня',
-  battle_wins:         'побед из',
   battle_beat:         'Обошёл:',
   battle_beat_more:    'и ещё',
   battle_similar:      'Похоже на твой выбор',
@@ -195,7 +175,6 @@ const uz: Record<keyof typeof ru, string> = {
   result_match_label: 'Moslik',
   result_no_exact:    'Aniq moslik topilmadi',
   tab_all_cuisines:   'Barcha oshxonalar',
-  btn_nearby:         'Yaqinda nima bor?',
   btn_retry:          'Qayta boshlash',
   btn_all_results:    'Barcha variantlar',
   btn_back:           'Orqaga',
@@ -206,33 +185,17 @@ const uz: Record<keyof typeof ru, string> = {
   results_title:       'Siz uchun mos',
   results_subtitle:    'AI swipe asosida tanladi',
   results_match_label: 'Moslik',
-  btn_nearby_list:     'Yaqinda nima bor?',
   btn_view_history:    'Tarixni ko‘rish',
   tab_this_cuisine:    'Shu oshxona',
 
   // ── History ──────────────────────────────────────────────────────────────────
   history_title:          "O'tgan izlashlar",
   history_empty_title:    "Bu yerda o'tgan\nizlashlaringiz ko'rinadi",
-  history_empty_subtitle: "Viktorinani o'tab, sevimli taomingizni saqlang",
   history_mode_meal:    'To‘yib ovqatlanish',
   history_mode_snack:   'Tamaddi',
   history_mode_dessert: 'Shirinlik',
   history_mode_random:  'Tasodifiy',
   history_mode_battle:  'Duel',
-
-  // ── Map ──────────────────────────────────────────────────────────────────────
-  map_title:    'Muassasalar',
-  places_empty_title:    'Nima yaqin?',
-  places_empty_subtitle: 'Bu funksiya ishlab chiqilmoqda!',
-
-  // ── Nearby («Что рядом?») ─────────────────────────────────────────────────────
-  nearby_title:          'Qayerda yeyish mumkin',
-  nearby_empty_title:    'Bu taom qayerda tortilishini hozircha bilmaymiz',
-  nearby_empty_subtitle: 'Muassasalarni qo‘shyapmiz — birozdan so‘ng qayta kiring',
-  price_currency:        'so‘m',
-  btn_express24:         'Express24',
-  btn_yandex_eda:        'Yandex Eda',
-  btn_open_dish:         'Ochish',
 
   // ── Profile ──────────────────────────────────────────────────────────────────
   profile_title:      'Profil',
@@ -245,7 +208,6 @@ const uz: Record<keyof typeof ru, string> = {
   clear_history_confirm_title:    "Butun tarixni tozalashni xohlaysizmi?",
   clear_history_confirm_subtitle: "Bu amalni bekor qilib bo'lmaydi — oldin ko'rgan barcha taomlar ro'yxatdan yo'qoladi.",
   btn_clear_history:  'Tozalash',
-  history_cleared_toast: 'Tarix tozalandi',
 
   // ── Diet options ─────────────────────────────────────────────────────────────
   diet_gluten:  'Gluten',
@@ -278,8 +240,6 @@ const uz: Record<keyof typeof ru, string> = {
   battle_or:           'yoki',
   battle_reject:       'bugun emas',
   battle_final:        'Final',
-  battle_result_title: 'Bugungi tanlovingiz',
-  battle_wins:         "g'alaba,",
   battle_beat:         'Yutdi:',
   battle_beat_more:    'va yana',
   battle_similar:      'Tanlovingizga o‘xshash',
