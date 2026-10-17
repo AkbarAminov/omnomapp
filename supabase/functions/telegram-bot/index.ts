@@ -10,12 +10,22 @@
 //   ADMIN_CHAT_ID       — numeric chat_id, куда падает фидбэк и уведомления о донатах
 //   MINIAPP_URL         — https://omnomapp.vercel.app (или текущий прод-домен, без query)
 // Донаты Stars (/donate) новых секретов не требуют — currency 'XTR' не нужен provider_token.
+// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — инжектятся платформой, используются только для
+// scripts/sql/012_reminder_subscribers.sql (ретеншн-эксперимент №1: напоминание раз в день).
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.8';
+
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET')!;
 const ADMIN_CHAT_ID = Number(Deno.env.get('ADMIN_CHAT_ID'));
 const MINIAPP_URL = Deno.env.get('MINIAPP_URL')!;
 
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+
+const admin = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  { auth: { persistSession: false } },
+);
 
 // ── Тексты и клавиатуры — ровно как в ТЗ ───────────────────────────────────────
 const START_TEXT = 'Привет! Я OMNOM 🍽 Помогу решить, что поесть, за минуту. Жми кнопку ниже 👇';
@@ -27,12 +37,18 @@ const HELP_TEXT = `OMNOM подбирает блюдо под настроени
 /feedback: написать автору
 /privacy: какие данные мы храним
 /donate: поддержать проект звёздами
+/remind: включить или выключить напоминание раз в день
 
 Свайпай карточки: Нет, Без разницы или Да. В конце получишь 3-5 блюд.`;
 
 const PRIVACY_TEXT = `Что храним: обезличенный идентификатор, язык интерфейса, ответы в квизе и выбранные блюда.
+Если включишь напоминание (/remind) — отдельно храним chat_id, чтобы бот мог тебе написать; выключишь — удаляем.
 Не храним: имя и username.
 Вопросы и удаление данных — через /feedback.`;
+
+const REMIND_ON_TEXT = 'Включил 🔔 Буду писать раз в день, около 12:45.';
+const REMIND_OFF_TEXT = 'Выключил 🔕 Больше не буду писать.';
+const REMIND_FAILED_TEXT = 'Не получилось сохранить, попробуй ещё раз чуть позже 🙏';
 
 const FEEDBACK_PROMPT = 'Напиши мне сообщение в ответ на это, я прочитаю';
 const FEEDBACK_BACK_HINT = 'Или вернись в меню:';
@@ -58,10 +74,13 @@ function miniAppUrl(source = 'bot'): string {
 const pickDishBtn = (source?: string) => ({ text: '📱 Подобрать блюдо', web_app: { url: miniAppUrl(source) } });
 const PICK_DISH_BTN = pickDishBtn();
 const BACK_BTN = { text: '⬅️ Назад', callback_data: 'start' };
+const remindBtn = (subscribed: boolean) =>
+  ({ text: subscribed ? '🔕 Выключить напоминание' : '🔔 Напоминать раз в день', callback_data: subscribed ? 'remind_off' : 'remind_on' });
 
-const startKeyboard = (source?: string) => ({
+const startKeyboard = (subscribed: boolean, source?: string) => ({
   inline_keyboard: [
     [pickDishBtn(source)],
+    [remindBtn(subscribed)],
     [{ text: '💬 Посмотреть все команды', callback_data: 'cmds' }],
     [{ text: '✉️ Написать автору', callback_data: 'feedback' }],
     [{ text: '⭐ Поддержать проект', callback_data: 'donate' }],
@@ -162,6 +181,20 @@ const answerPreCheckoutQuery = (id: string, ok: boolean) =>
 const copyMessage = (toChatId: number, fromChatId: number, messageId: number) =>
   tg('copyMessage', { chat_id: toChatId, from_chat_id: fromChatId, message_id: messageId });
 
+// ── Напоминание раз в день (opt-in, scripts/sql/012) ───────────────────────────
+async function isSubscribed(chatId: number): Promise<boolean> {
+  const { data } = await admin.from('reminder_subscribers').select('opted_in').eq('chat_id', chatId).maybeSingle();
+  return data?.opted_in ?? false;
+}
+
+// Возвращает, доехала ли запись: тот же урок, что с saveSettings в settingsStorage.ts —
+// молча проглоченная ошибка означала бы «Включил 🔔» в ответ и ни одной подписки в базе.
+async function setSubscribed(chatId: number, opted_in: boolean): Promise<boolean> {
+  const { error } = await admin.from('reminder_subscribers').upsert({ chat_id: chatId, opted_in }, { onConflict: 'chat_id' });
+  if (error) console.error('[bot] reminder_subscribers upsert failed:', error.message);
+  return !error;
+}
+
 // ── Обработка одного апдейта ────────────────────────────────────────────────────
 async function handleMessage(msg: TgMessage): Promise<void> {
   const chatId = msg.chat.id;
@@ -191,7 +224,7 @@ async function handleMessage(msg: TgMessage): Promise<void> {
 
   switch (command) {
     case '/start':
-      await sendMessage(chatId, START_TEXT, startKeyboard(startArg));
+      await sendMessage(chatId, START_TEXT, startKeyboard(await isSubscribed(chatId), startArg));
       return;
     case '/help':
       await sendMessage(chatId, HELP_TEXT, helpKeyboard());
@@ -208,6 +241,13 @@ async function handleMessage(msg: TgMessage): Promise<void> {
     case '/donate':
       await sendMessage(chatId, DONATE_INTRO, donateKeyboard());
       return;
+    case '/remind': {
+      const subscribed = await isSubscribed(chatId);
+      const ok = await setSubscribed(chatId, !subscribed);
+      const reply = !ok ? REMIND_FAILED_TEXT : subscribed ? REMIND_OFF_TEXT : REMIND_ON_TEXT;
+      await sendMessage(chatId, reply, backOnlyKeyboard());
+      return;
+    }
     default:
       await sendMessage(chatId, FALLBACK_TEXT, fallbackKeyboard());
   }
@@ -220,7 +260,7 @@ async function handleCallback(cb: TgCallbackQuery): Promise<void> {
   if (!chatId) return;
 
   if (cb.data === 'start') {
-    await sendMessage(chatId, START_TEXT, startKeyboard());
+    await sendMessage(chatId, START_TEXT, startKeyboard(await isSubscribed(chatId)));
   } else if (cb.data === 'cmds') {
     await sendMessage(chatId, HELP_TEXT, helpKeyboard());
   } else if (cb.data === 'feedback') {
@@ -231,6 +271,11 @@ async function handleCallback(cb: TgCallbackQuery): Promise<void> {
   } else if (cb.data?.startsWith('donate_')) {
     const amount = Number(cb.data.slice('donate_'.length));
     if (Number.isInteger(amount) && amount > 0) await sendInvoice(chatId, amount);
+  } else if (cb.data === 'remind_on' || cb.data === 'remind_off') {
+    const subscribed = cb.data === 'remind_on';
+    const ok = await setSubscribed(chatId, subscribed);
+    const reply = !ok ? REMIND_FAILED_TEXT : subscribed ? REMIND_ON_TEXT : REMIND_OFF_TEXT;
+    await sendMessage(chatId, reply, backOnlyKeyboard());
   }
 }
 

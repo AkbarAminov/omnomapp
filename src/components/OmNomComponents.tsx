@@ -2130,10 +2130,16 @@ export function AppOnboarding({ onDone }: { onDone(): void }) {
   const width = useRef(1);
   const horizontal = useRef<boolean | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => {
+    trackEvent('onboarding_shown', {});
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, []);
 
+  // «открыл и вышел» сессии раньше были неотличимы от «застрял в онбординге» — оба давали
+  // app_open без единого следующего события. completed/skipped(step) закрывает эту дыру.
   const dismiss = () => {
     if (leaving) return;
+    trackEvent(step === STEPS - 1 ? 'onboarding_completed' : 'onboarding_skipped', { step });
     setLeaving(true);
     timer.current = setTimeout(onDone, 260);
   };
