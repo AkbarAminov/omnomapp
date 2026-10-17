@@ -10,6 +10,14 @@ import { affinity, canPlay, createBattleSession, registerChoice } from '../logic
 import type { BattleSession } from '../logic/battleEngine';
 import { isBattleOnboardingSeen, loadDiet, markBattleOnboardingSeen, saveSettings } from '../logic/settingsStorage';
 import { trackEvent } from '../logic/metrics';
+import { probeAdmin } from '../lib/adminStats';
+
+// Панель владельца грузится отдельным чанком и только когда её открыли: обычному
+// пользователю этот код не нужен, а Mini App открывают по мобильной сети. Статический
+// импорт добавлял дашборд в основной бандл всем 39 пользователям.
+const StatsDashboard = React.lazy(() =>
+  import('./StatsDashboard').then((m) => ({ default: m.StatsDashboard })),
+);
 import { buildShareCard, miniAppShareUrl, shareBlob, shareLink } from '../logic/shareCard';
 import { getTelegramUserInfo } from '../lib/userId';
 import { usePressScale } from '../hooks/usePressScale';
@@ -2849,13 +2857,19 @@ const PROFILE_ITEMS = [
   { id: 'share',  icon: '/assets/icons/settings-share.svg' },
 ] as const;
 
-type ProfileItemId = typeof PROFILE_ITEMS[number]['id'];
+// Пункт владельца живёт отдельно от PROFILE_ITEMS и дописывается в список только тогда,
+// когда сервер подтвердил права. В бандле нет ни одного Telegram id: probeAdmin() просто
+// спрашивает Edge Function про текущего пользователя, а та проверяет подпись initData.
+const STATS_ITEM = { id: 'stats' as const, icon: '' };
+
+type ProfileItemId = typeof PROFILE_ITEMS[number]['id'] | typeof STATS_ITEM['id'];
 
 const PROFILE_LABEL_KEYS: Record<ProfileItemId, TranslationKey> = {
   diet:   'profile_diet',
   lang:   'profile_lang',
   notify: 'profile_notify',
   share:  'profile_share',
+  stats:  'profile_stats',
 };
 
 const DIET_OPTIONS: Array<{ id: string; key: TranslationKey }> = [
@@ -2995,7 +3009,7 @@ function ProfileUser() {
   );
 }
 
-type ProfileSubPage = 'none' | 'diet' | 'language';
+type ProfileSubPage = 'none' | 'diet' | 'language' | 'stats';
 
 export function ProfileScreen({ onSubPageChange }: {
   onSubPageChange?: (inSubPage: boolean) => void;
@@ -3004,6 +3018,7 @@ export function ProfileScreen({ onSubPageChange }: {
   const [subPage, setSubPage] = useState<ProfileSubPage>('none');
   const [diet, setDiet] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const shareText = t('share_text');
 
   const showToast = (message: string) => {
@@ -3014,6 +3029,15 @@ export function ProfileScreen({ onSubPageChange }: {
   useEffect(() => {
     loadDiet(d => setDiet(d));
   }, []);
+
+  // Молча: обычный пользователь не должен заметить, что проверка вообще была.
+  useEffect(() => {
+    void probeAdmin().then(setIsAdmin);
+  }, []);
+
+  const profileItems: Array<{ id: ProfileItemId; icon: string }> = isAdmin
+    ? [...PROFILE_ITEMS, STATS_ITEM]
+    : [...PROFILE_ITEMS];
 
   const goToSubPage = (page: ProfileSubPage) => {
     setSubPage(page);
@@ -3069,7 +3093,7 @@ export function ProfileScreen({ onSubPageChange }: {
             <div style={{ flex: 1, overflowY: 'auto', padding: `clamp(16px, 3dvh, 24px) ${PAD} clamp(12px, 2dvh, 20px)` }}>
               <ProfileUser />
               <div>
-                {PROFILE_ITEMS.map((item, i) => {
+                {profileItems.map((item, i) => {
                   // Не ведёт никуда, в отличие от остальных строк — тап просто показывает
                   // тост «Скоро». Шеврон (он обещает переход) и полная яркость текста тут
                   // были бы враньём, но строка не disabled: тап всё равно работает.
@@ -3086,17 +3110,27 @@ export function ProfileScreen({ onSubPageChange }: {
                         else if (item.id === 'lang') goToSubPage('language');
                         else if (item.id === 'share') handleShare();
                         else if (item.id === 'notify') showToast(t('toast_soon'));
+                        else if (item.id === 'stats') goToSubPage('stats');
                       }}
                       style={{
                         width: '100%', display: 'flex', alignItems: 'center', gap: '14px',
                         padding: 'clamp(14px, 3.2dvh, 18px) 0',
                         background: 'none', border: 'none',
-                        borderBottom: i < PROFILE_ITEMS.length - 1 ? DIVIDER : 'none',
+                        borderBottom: i < profileItems.length - 1 ? DIVIDER : 'none',
                         cursor: 'pointer',
                         textAlign: 'left', opacity: isNotify ? 0.6 : 1,
                       }}
                     >
-                      <img src={item.icon} alt="" style={{ width: '22px', height: '22px', flexShrink: 0, objectFit: 'contain' }} />
+                      {item.id === 'stats'
+                        ? (
+                          <span aria-hidden style={{
+                            width: '22px', height: '22px', flexShrink: 0, fontSize: '18px',
+                            lineHeight: '22px', textAlign: 'center',
+                          }}>
+                            📊
+                          </span>
+                        )
+                        : <img src={item.icon} alt="" style={{ width: '22px', height: '22px', flexShrink: 0, objectFit: 'contain' }} />}
                       <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontWeight: 500, color: '#3D1A00', fontSize: 'clamp(14px, 3.5vw, 16px)' }}>
                         {t(PROFILE_LABEL_KEYS[item.id])}
                       </span>
@@ -3159,6 +3193,21 @@ export function ProfileScreen({ onSubPageChange }: {
               </PressButton>
             </div>
           </>
+        )}
+
+        {/* ── Owner-only stats sub-page ────────────────────────────────────── */}
+        {subPage === 'stats' && (
+          <React.Suspense fallback={(
+            <div style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: '13px',
+              color: 'rgba(108, 41, 18, 0.55)',
+            }}>
+              Загружаем статистику…
+            </div>
+          )}>
+            <StatsDashboard onBack={() => goToSubPage('none')} />
+          </React.Suspense>
         )}
 
       </div>

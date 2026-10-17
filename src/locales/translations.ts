@@ -74,6 +74,8 @@ const ru = {
   profile_lang:   'Язык',
   profile_notify: 'Уведомления',
   profile_share:  'Рассказать о приложении',
+  // Видна только владельцу: пункт рисуется по ответу Edge Function admin-stats.
+  profile_stats:  'Статистика OmNom',
   profile_clear_history: 'Очистить историю',
   clear_history_confirm_title:    'Очистить всю историю?',
   clear_history_confirm_subtitle: 'Это действие нельзя отменить — все блюда, что попадались раньше, исчезнут из списка.',
@@ -204,6 +206,7 @@ const uz: Record<keyof typeof ru, string> = {
   profile_lang:   'Til',
   profile_notify: 'Bildirishnomalar',
   profile_share:  'Ilova haqida aytish',
+  profile_stats:  'OmNom statistikasi',
   profile_clear_history: 'Tarixni tozalash',
   clear_history_confirm_title:    "Butun tarixni tozalashni xohlaysizmi?",
   clear_history_confirm_subtitle: "Bu amalni bekor qilib bo'lmaydi — oldin ko'rgan barcha taomlar ro'yxatdan yo'qoladi.",
