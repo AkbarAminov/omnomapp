@@ -9,8 +9,14 @@
 // Триггер: Supabase Dashboard → Integrations → Cron (НЕ внутри Edge Functions), тип задания
 // «Supabase Edge Function», метод POST, заголовок `x-cron-secret: <CRON_SECRET>`.
 // Расписание `45 7 * * 1`: поле в дашборде всегда в GMT, то есть 07:45 UTC = 12:45 по
-// Ташкенту в понедельник (UTC+5, без перехода на летнее время). Timeout поставить 30000:
-// рассылка последовательная, по запросу к Telegram на человека.
+// Ташкенту в понедельник (UTC+5, без перехода на летнее время).
+//
+// Timeout в форме дашборда ограничен сверху 5000 мс — больше поставить нельзя. Поэтому
+// функция обязана укладываться в эти пять секунд, и ниже сделано три вещи ровно для этого:
+// отправка параллельная пулом, отметки ставятся одним запросом вместо одного на человека,
+// и за один вызов берётся не больше BATCH_LIMIT адресов. Плюс сама операция идемпотентна и
+// возобновляема: выборка идёт по consent_asked_at is null, так что любой обрыв посередине
+// лечится следующим запуском — он подберёт тех, кого не успел отметить.
 //
 // Секреты те же, что у send-reminders: TELEGRAM_BOT_TOKEN, MINIAPP_URL, CRON_SECRET.
 //
@@ -32,6 +38,13 @@ const admin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   { auth: { persistSession: false } },
 );
+
+// Сколько адресов берём за один вызов. Защита от того, что при выросшем списке функция
+// перестанет укладываться в таймаут: остаток уедет следующим запуском, никто не потерян.
+const BATCH_LIMIT = 300;
+// Параллельных отправок. Telegram разрешает порядка 30 сообщений в секунду разным людям,
+// так что восемь — с большим запасом, и 300 адресов уходят примерно за 40 запросов подряд.
+const CONCURRENCY = 8;
 
 // src=consent уезжает в app_sessions.source, так видно, сколько открытий дал сам вопрос,
 // отдельно от src=reminder у ежедневной рассылки.
@@ -89,32 +102,51 @@ Deno.serve(async (req) => {
     .from('reminder_subscribers')
     .select('chat_id')
     .is('consent_asked_at', null)
-    .gt('chat_id', 0);
+    .gt('chat_id', 0)
+    .limit(BATCH_LIMIT);
   if (error) {
     console.error('[ask-consent] query failed:', error.message);
     return new Response('query failed', { status: 500 });
   }
 
-  const now = new Date().toISOString();
+  const chatIds = (rows ?? []).map((r) => r.chat_id as number);
   let asked = 0, unreachable = 0, failed = 0;
-  for (const r of rows ?? []) {
-    const result = await ask(r.chat_id);
-    if (result === true) {
-      asked++;
-      await admin.from('reminder_subscribers').update({ consent_asked_at: now }).eq('chat_id', r.chat_id);
-    } else if (result === false) {
-      // Отметку ставим и здесь: написать этому адресу нельзя, и долбиться в него каждую
-      // неделю бессмысленно. consent_answered_at остаётся пустым, так что в статистике это
-      // видно отдельно от явного отказа.
-      unreachable++;
-      await admin.from('reminder_subscribers').update({ consent_asked_at: now }).eq('chat_id', r.chat_id);
-    } else {
-      // Временная ошибка: отметку не ставим, попробуем в следующий понедельник.
-      failed++;
-    }
+  // Отмечаем и доставленных, и недоступных: написать по такому адресу нельзя, и долбиться
+  // в него каждую неделю бессмысленно. Разницу видно по consent_answered_at — у
+  // недоступного он останется пустым, как и у того, кто промолчал.
+  const toMark: number[] = [];
+
+  // Пул на CONCURRENCY воркеров поверх общей очереди: простой Promise.all по всему списку
+  // выстрелил бы 300 запросов разом и получил лимит Telegram, а последовательный цикл не
+  // влезает в таймаут.
+  const queue = [...chatIds];
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+      for (;;) {
+        const chatId = queue.shift();
+        if (chatId === undefined) return;
+        const result = await ask(chatId);
+        if (result === true) { asked++; toMark.push(chatId); }
+        else if (result === false) { unreachable++; toMark.push(chatId); }
+        // Временная ошибка: отметку не ставим, подберём следующим запуском.
+        else failed++;
+      }
+    }),
+  );
+
+  // Один запрос на всю пачку вместо одного на человека — ради того же таймаута.
+  if (toMark.length) {
+    const { error: markErr } = await admin
+      .from('reminder_subscribers')
+      .update({ consent_asked_at: new Date().toISOString() })
+      .in('chat_id', toMark);
+    // Если отметка не записалась, вопрос уже отправлен, и следующий запуск отправит его
+    // повторно. Поэтому это ошибка, а не предупреждение: единственный способ получить
+    // дубль у человека.
+    if (markErr) console.error('[ask-consent] mark failed, duplicates possible:', markErr.message);
   }
 
-  const summary = { candidates: (rows ?? []).length, asked, unreachable, failed };
+  const summary = { candidates: chatIds.length, asked, unreachable, failed, marked: toMark.length };
   console.log('[ask-consent]', JSON.stringify(summary));
   return new Response(JSON.stringify(summary), { headers: { 'content-type': 'application/json' } });
 });
