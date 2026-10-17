@@ -58,6 +58,10 @@ const PRIVACY_TEXT = `Что храним: обезличенный иденти
 
 const REMIND_ON_TEXT = 'Готово, напомню в 13:00. Выключить: /stop';
 const REMIND_OFF_TEXT = 'Готово, больше не напомню. Включить обратно можно кнопкой в /start';
+// Ответ на кнопку «Нет, спасибо» из вопроса про согласие (supabase/functions/ask-consent).
+// Отличается от REMIND_OFF_TEXT: там человек выключает уже включённое, здесь — отказывается
+// от того, чего и не было, и обещать «включить обратно» нечего.
+const REMIND_NO_TEXT = 'Понял, напоминать не буду 🙂 Заходи сам, когда не можешь выбрать — OmNom под рукой.';
 const REMIND_FAILED_TEXT = 'Не получилось сохранить, попробуй ещё раз чуть позже 🙏';
 
 const FEEDBACK_PROMPT = 'Напиши мне сообщение в ответ на это, я прочитаю';
@@ -217,9 +221,31 @@ const copyMessage = (toChatId: number, fromChatId: number, messageId: number) =>
 // Возвращает, доехала ли запись: тот же урок, что с saveSettings в settingsStorage.ts,
 // молча проглоченная ошибка означала бы «Готово, напомню в 13:00» и ни одной подписки в базе.
 async function setSubscribed(chatId: number, opted_in: boolean): Promise<boolean> {
-  const { error } = await admin.from('reminder_subscribers').upsert({ chat_id: chatId, opted_in }, { onConflict: 'chat_id' });
+  const { error } = await admin.from('reminder_subscribers').upsert(
+    // consent_answered_at: человек нажал кнопку, то есть ответил явно. Это отличает его от
+    // того, кто вопрос получил и промолчал — а молчание мы тоже считаем отказом, но хотим
+    // видеть разницу (scripts/sql/016_reminder_consent.sql).
+    { chat_id: chatId, opted_in, consent_answered_at: new Date().toISOString() },
+    { onConflict: 'chat_id' },
+  );
   if (error) console.error('[bot] reminder_subscribers upsert failed:', error.message);
   return !error;
+}
+
+// Запоминаем адрес, но НЕ подписываем: opted_in остаётся false, рассылка его не возьмёт.
+// Без этого охват вопроса о согласии навсегда остаётся теми, кто когда-то сам нажал кнопку
+// (на 17.10 это 10 адресов на 41 пользователя приложения).
+//
+// ignoreDuplicates даёт ON CONFLICT DO NOTHING — принципиально: обычный upsert затёр бы
+// opted_in = true у того, кто уже согласился, и отписал бы человека при следующем же
+// сообщении боту.
+async function rememberChat(chatId: number): Promise<void> {
+  if (chatId <= 0) return; // группы и супергруппы: рассылок в них нет (см. 013)
+  const { error } = await admin.from('reminder_subscribers').upsert(
+    { chat_id: chatId, opted_in: false, first_seen_from: 'bot' },
+    { onConflict: 'chat_id', ignoreDuplicates: true },
+  );
+  if (error) console.error('[bot] rememberChat failed:', error.message);
 }
 
 // ── Обработка одного апдейта ────────────────────────────────────────────────────
@@ -241,6 +267,9 @@ async function handleMessage(msg: TgMessage): Promise<void> {
     await handleGroupMessage(msg, chatId);
     return;
   }
+
+  // Любое личное обращение — повод запомнить адрес. Подписки это не создаёт.
+  await rememberChat(chatId);
 
   // Оплата Stars прошла, admin уведомляется тем же способом, что и фидбэк, без БД.
   if (msg.successful_payment) {
@@ -304,11 +333,18 @@ async function handleCallback(cb: TgCallbackQuery): Promise<void> {
   // но если попадёт, лучше промолчать, чем слать сообщение, которое Telegram отклонит.
   if (cb.message?.chat.type !== 'private') return;
 
+  await rememberChat(chatId);
+
   if (cb.data === 'start') {
     await sendMessage(chatId, START_TEXT, startKeyboard());
   } else if (cb.data === 'remind_on') {
     const ok = await setSubscribed(chatId, true);
     await sendMessage(chatId, ok ? REMIND_ON_TEXT : REMIND_FAILED_TEXT, backOnlyKeyboard());
+  } else if (cb.data === 'remind_off') {
+    // Кнопки «Нет» раньше не существовало вовсе: отказаться можно было только командой
+    // /stop, то есть вопрос с двумя кнопками было нечем обслужить.
+    const ok = await setSubscribed(chatId, false);
+    await sendMessage(chatId, ok ? REMIND_NO_TEXT : REMIND_FAILED_TEXT, backOnlyKeyboard());
   } else if (cb.data === 'cmds') {
     await sendMessage(chatId, HELP_TEXT, helpKeyboard());
   } else if (cb.data === 'feedback') {

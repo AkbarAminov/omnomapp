@@ -130,6 +130,35 @@ Deno.serve(async (req) => {
     await admin.from('history').update({ user_id: userId }).eq('user_id', rawTgId);
     await admin.from('user_settings').update({ user_id: userId }).eq('user_id', rawTgId);
 
+    // Запоминаем chat_id, чтобы боту было куда писать. В личном чате chat_id и есть id
+    // пользователя, а он здесь уже доказан подписью initData.
+    //
+    // Это сознательный отход от принципа, записанного в scripts/sql/012: раньше сырой id
+    // жил только в таблице бота, и пайплайн Mini App его не касался. Причина отхода: без
+    // этого охват любой рассылки навсегда ограничен теми, кто когда-то сам нажал кнопку в
+    // боте — на 17.10 это 10 адресов при 41 пользователе приложения, причём 25 из них бота
+    // точно открывали, но их id были посчитаны в хэш и выброшены, а хэш необратим.
+    //
+    // Подписки это НЕ создаёт: opted_in = false, рассылка такие строки не берёт. Согласие
+    // по-прежнему появляется только по нажатию кнопки в боте.
+    //
+    // ignoreDuplicates даёт ON CONFLICT DO NOTHING и это принципиально: обычный upsert
+    // затирал бы opted_in = true у того, кто уже согласился, то есть каждый вход в
+    // приложение молча отписывал бы человека от напоминания.
+    //
+    // Свой try/catch, а не общий внешний: внешний возвращает 500 и ломает выдачу сессии,
+    // то есть сетевой сбой на этой второстепенной записи обрушил бы вход в приложение.
+    // Сюда же попадает случай «016 ещё не применён»: колонки нет, запись не проходит,
+    // авторизация работает как раньше.
+    try {
+      await admin.from('reminder_subscribers').upsert(
+        { chat_id: Number(rawTgId), opted_in: false, first_seen_from: 'app' },
+        { onConflict: 'chat_id', ignoreDuplicates: true },
+      );
+    } catch (e) {
+      console.warn('[auth-telegram] rememberChat failed:', (e as Error)?.message);
+    }
+
     const { data: link, error: linkErr } = await admin.auth.admin.generateLink({
       type: 'magiclink',
       email: syntheticEmail,
