@@ -59,6 +59,12 @@ const REMIND_ON_TEXT = 'Включил 🔔 Буду писать раз в де
 const REMIND_OFF_TEXT = 'Выключил 🔕 Больше не буду писать.';
 const REMIND_FAILED_TEXT = 'Не получилось сохранить, попробуй ещё раз чуть позже 🙏';
 
+// В группе напоминание по умолчанию ВЫКЛЮЧЕНО, в отличие от лички: ежедневное сообщение в
+// общий чат, которого никто не просил, раздражает куда сильнее, чем в переписке один на один.
+const GROUP_TEXT = 'Привет! Помогу выбрать, что поесть 🍽 Жми кнопку — подберу блюдо.';
+const GROUP_REMIND_ON_TEXT = 'Включил 🔔 Буду спрашивать здесь про обед раз в день, около 12:45. Выключить — /remind.';
+const GROUP_REMIND_OFF_TEXT = 'Выключил 🔕 Больше не буду писать сюда.';
+
 const FEEDBACK_PROMPT = 'Напиши мне сообщение в ответ на это, я прочитаю';
 const FEEDBACK_BACK_HINT = 'Или вернись в меню:';
 const FEEDBACK_THANKS = 'Спасибо, передал ✅';
@@ -162,6 +168,22 @@ async function tg(method: string, payload: Record<string, unknown>): Promise<voi
 const sendMessage = (chatId: number, text: string, reply_markup?: unknown) =>
   tg('sendMessage', { chat_id: chatId, text, reply_markup });
 
+// Username бота спрашиваем у самого Telegram, а не держим в секретах: он и так известен
+// токену, лишняя переменная окружения только разъехалась бы с реальностью при смене бота.
+// Нужен для групп: там вместо web_app-кнопки можно дать только обычную ссылку на бота.
+let cachedUsername = '';
+async function botUsername(): Promise<string> {
+  if (cachedUsername) return cachedUsername;
+  try {
+    const res = await fetch(`${TELEGRAM_API}/getMe`);
+    const body = await res.json();
+    cachedUsername = body?.result?.username ?? '';
+  } catch (e) {
+    console.error('[bot] getMe failed:', (e as Error).message);
+  }
+  return cachedUsername;
+}
+
 const answerCallbackQuery = (id: string, text?: string) =>
   tg('answerCallbackQuery', { callback_query_id: id, text });
 
@@ -218,12 +240,40 @@ async function ensureSubscribed(chatId: number): Promise<void> {
 }
 
 // ── Обработка одного апдейта ────────────────────────────────────────────────────
+// Группа: отвечаем только на явные команды и только обычной ссылкой — web_app-кнопку
+// Telegram в группах не принимает, сообщение с ней не уходит вовсе. На прочие реплики не
+// реагируем: бот в общем чате, который комментирует каждое сообщение, выключают первым.
+async function handleGroupMessage(msg: TgMessage, chatId: number): Promise<void> {
+  const text = (msg.text ?? '').trim();
+  if (!text.startsWith('/')) return;
+  const command = text.split(/[\s@]/)[0];
+
+  if (command === '/remind') {
+    const subscribed = await isSubscribed(chatId);
+    const ok = await setSubscribed(chatId, !subscribed);
+    const reply = !ok ? REMIND_FAILED_TEXT : subscribed ? GROUP_REMIND_OFF_TEXT : GROUP_REMIND_ON_TEXT;
+    await sendMessage(chatId, reply);
+    return;
+  }
+  if (command === '/start' || command === '/help') {
+    const username = await botUsername();
+    // ?start=group доезжает до Mini App как src=group — видно, сколько заходов дали группы.
+    const keyboard = username
+      ? { inline_keyboard: [[{ text: '📱 Подобрать блюдо', url: `https://t.me/${username}?start=group` }]] }
+      : undefined;
+    await sendMessage(chatId, GROUP_TEXT, keyboard);
+  }
+}
+
 async function handleMessage(msg: TgMessage): Promise<void> {
   const chatId = msg.chat.id;
+  if (msg.chat.type !== 'private') {
+    await handleGroupMessage(msg, chatId);
+    return;
+  }
   // Записываем на любом касании бота, а не только на /start: иначе человек, открывший
-  // Mini App кнопкой из старого сообщения, так и остался бы неизвестным. Только личные
-  // чаты — в группу ежедневная рассылка не нужна никому.
-  if (msg.chat.type === 'private') await ensureSubscribed(chatId);
+  // Mini App кнопкой из старого сообщения, так и остался бы неизвестным.
+  await ensureSubscribed(chatId);
 
   // Оплата Stars прошла — admin уведомляется тем же способом, что и фидбэк, без БД.
   if (msg.successful_payment) {
@@ -286,7 +336,11 @@ async function handleCallback(cb: TgCallbackQuery): Promise<void> {
   await answerCallbackQuery(cb.id);
   const chatId = cb.message?.chat.id;
   if (!chatId) return;
-  if (cb.message?.chat.type === 'private') await ensureSubscribed(chatId);
+  // Все клавиатуры ниже содержат web_app-кнопку, которую в группу отправить нельзя. В группе
+  // у бота только ссылочные кнопки, без callback_data, поэтому сюда она попасть не должна —
+  // но если попадёт, лучше промолчать, чем слать сообщение, которое Telegram отклонит.
+  if (cb.message?.chat.type !== 'private') return;
+  await ensureSubscribed(chatId);
 
   if (cb.data === 'start') {
     const subscribed = await isSubscribed(chatId);
