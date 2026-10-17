@@ -60,9 +60,13 @@ async function botUsername(): Promise<string> {
 async function pickDishButton(chatId: number): Promise<Record<string, unknown>> {
   if (chatId > 0) return { text: '📱 Подобрать блюдо', web_app: { url: miniAppUrl() } };
   const username = await botUsername();
-  return username
-    ? { text: '📱 Подобрать блюдо', url: `https://t.me/${username}?start=reminder` }
-    : { text: '📱 Подобрать блюдо', url: miniAppUrl() };
+  if (!username) return { text: '📱 Подобрать блюдо', url: miniAppUrl() };
+  // Прямая ссылка открывает Mini App прямо в группе, но существует только с коротким именем
+  // приложения (@BotFather → /newapp, секрет MINIAPP_SHORTNAME). Без него — ссылка в личку.
+  const shortname = Deno.env.get('MINIAPP_SHORTNAME');
+  return shortname
+    ? { text: '📱 Подобрать блюдо', url: `https://t.me/${username}/${shortname}?startapp=reminder` }
+    : { text: '📱 Подобрать блюдо', url: `https://t.me/${username}?start=reminder` };
 }
 
 // true = доставлено, false = бот заблокирован (отписать), null = временная ошибка (попробовать завтра).

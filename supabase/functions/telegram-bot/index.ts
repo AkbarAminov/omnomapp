@@ -240,6 +240,23 @@ async function ensureSubscribed(chatId: number): Promise<void> {
 }
 
 // ── Обработка одного апдейта ────────────────────────────────────────────────────
+// Ссылка для групп. Открыть Mini App прямо в групповом чате умеет только прямая ссылка вида
+// t.me/<bot>/<app>?startapp=… — web_app-кнопки группам недоступны в принципе. Такая ссылка
+// существует, лишь если приложению заведено короткое имя (@BotFather → /newapp) и оно
+// положено в секрет MINIAPP_SHORTNAME; пока его нет, остаётся ссылка в личку с ботом, и
+// человек уходит из группы в переписку. Метка source доезжает в обоих случаях: у прямой
+// ссылки через startapp → initDataUnsafe.start_param, у обычной — через ?start= и редирект.
+// Env читаем здесь, а не на уровне модуля: иначе добавленный секрет не подхватится, пока
+// функцию не передеплоишь (ровно на этом мы и застряли с CRON_SECRET).
+async function miniAppLink(source: string): Promise<string | null> {
+  const username = await botUsername();
+  if (!username) return null;
+  const shortname = Deno.env.get('MINIAPP_SHORTNAME');
+  return shortname
+    ? `https://t.me/${username}/${shortname}?startapp=${source}`
+    : `https://t.me/${username}?start=${source}`;
+}
+
 // Группа: отвечаем только на явные команды и только обычной ссылкой — web_app-кнопку
 // Telegram в группах не принимает, сообщение с ней не уходит вовсе. На прочие реплики не
 // реагируем: бот в общем чате, который комментирует каждое сообщение, выключают первым.
@@ -256,11 +273,8 @@ async function handleGroupMessage(msg: TgMessage, chatId: number): Promise<void>
     return;
   }
   if (command === '/start' || command === '/help') {
-    const username = await botUsername();
-    // ?start=group доезжает до Mini App как src=group — видно, сколько заходов дали группы.
-    const keyboard = username
-      ? { inline_keyboard: [[{ text: '📱 Подобрать блюдо', url: `https://t.me/${username}?start=group` }]] }
-      : undefined;
+    const url = await miniAppLink('group');
+    const keyboard = url ? { inline_keyboard: [[{ text: '📱 Подобрать блюдо', url }]] } : undefined;
     await sendMessage(chatId, GROUP_TEXT, keyboard);
   }
 }
