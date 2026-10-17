@@ -47,8 +47,11 @@ const HELP_TEXT = `OMNOM подбирает блюдо под настроени
 
 Свайпай карточки: Нет, Без разницы или Да. В конце получишь 3-5 блюд.`;
 
+// Текст обязан совпадать с тем, что код реально делает: chat_id теперь пишется при любом
+// обращении к боту, а не по кнопке, и при выключении напоминания строка не удаляется —
+// она остаётся с пометкой «не писать», иначе подписка по умолчанию вернула бы человека обратно.
 const PRIVACY_TEXT = `Что храним: обезличенный идентификатор, язык интерфейса, ответы в квизе и выбранные блюда.
-Если включишь напоминание (/remind) — отдельно храним chat_id, чтобы бот мог тебе написать; выключишь — удаляем.
+Ещё храним chat_id этого чата, чтобы раз в день присылать напоминание. Выключишь его (/remind) — chat_id останется, но только чтобы помнить, что писать тебе не нужно.
 Не храним: имя и username.
 Вопросы и удаление данных — через /feedback.`;
 
@@ -108,7 +111,9 @@ const donateKeyboard = () => {
 };
 
 // ── Минимальные типы Telegram Update — только то, что реально используем ──────
-interface TgChat { id: number }
+// type нужен, чтобы не записывать в подписчики групповые чаты: туда бот попадает, когда его
+// добавили в группу, и ежедневная рассылка в общий чат — совсем не то же самое, что в личку.
+interface TgChat { id: number; type?: string }
 interface TgUser { id: number; is_bot: boolean }
 interface TgSuccessfulPayment { currency: string; total_amount: number; invoice_payload: string }
 interface TgMessage {
@@ -215,6 +220,10 @@ async function ensureSubscribed(chatId: number): Promise<void> {
 // ── Обработка одного апдейта ────────────────────────────────────────────────────
 async function handleMessage(msg: TgMessage): Promise<void> {
   const chatId = msg.chat.id;
+  // Записываем на любом касании бота, а не только на /start: иначе человек, открывший
+  // Mini App кнопкой из старого сообщения, так и остался бы неизвестным. Только личные
+  // чаты — в группу ежедневная рассылка не нужна никому.
+  if (msg.chat.type === 'private') await ensureSubscribed(chatId);
 
   // Оплата Stars прошла — admin уведомляется тем же способом, что и фидбэк, без БД.
   if (msg.successful_payment) {
@@ -241,7 +250,6 @@ async function handleMessage(msg: TgMessage): Promise<void> {
 
   switch (command) {
     case '/start': {
-      await ensureSubscribed(chatId);
       const subscribed = await isSubscribed(chatId);
       await sendMessage(chatId, startText(subscribed), startKeyboard(subscribed, startArg));
       return;
@@ -278,6 +286,7 @@ async function handleCallback(cb: TgCallbackQuery): Promise<void> {
   await answerCallbackQuery(cb.id);
   const chatId = cb.message?.chat.id;
   if (!chatId) return;
+  if (cb.message?.chat.type === 'private') await ensureSubscribed(chatId);
 
   if (cb.data === 'start') {
     const subscribed = await isSubscribed(chatId);
