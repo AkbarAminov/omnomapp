@@ -246,8 +246,9 @@ async function ensureSubscribed(chatId: number): Promise<void> {
 // положено в секрет MINIAPP_SHORTNAME; пока его нет, остаётся ссылка в личку с ботом, и
 // человек уходит из группы в переписку. Метка source доезжает в обоих случаях: у прямой
 // ссылки через startapp → initDataUnsafe.start_param, у обычной — через ?start= и редирект.
-// Env читаем здесь, а не на уровне модуля: иначе добавленный секрет не подхватится, пока
-// функцию не передеплоишь (ровно на этом мы и застряли с CRON_SECRET).
+// Где читать env — роли не играет: окружение изолята фиксируется при его старте, поэтому
+// любой новый или изменённый секрет виден только после передеплоя, а не со следующего
+// запроса. На этом мы потеряли несколько кругов с CRON_SECRET.
 async function miniAppLink(source: string): Promise<string | null> {
   const username = await botUsername();
   if (!username) return null;
