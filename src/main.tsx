@@ -102,10 +102,11 @@ function Root() {
     // Fire-and-forget: must not delay first render or ever surface to the UI. The session
     // insert needs auth.uid(), so it's chained after initAuth rather than fired in parallel.
     void initAuth().then(() => {
-      // start_param приходит только у прямых ссылок вида t.me/<bot>/<app>?startapp=…, а их
-      // у нас пока нет (short name не заведён). Кнопка бота открывает Mini App обычным URL,
-      // и метка источника живёт в его query (?src=bot|channel|…) — без этого фолбэка колонка
-      // source пустовала у всех сессий подряд.
+      // Два пути, оба рабочие. Прямая ссылка t.me/<bot>/start?startapp=<метка> (ей открывают
+      // приложение из групп) отдаёт метку в initDataUnsafe.start_param: оттуда берётся
+      // source = 'group'. Обычная web_app-кнопка в личке открывает Mini App по URL, и метка
+      // живёт в его query (?src=bot|reminder|channel). Без второй ветки колонка source
+      // пустовала бы у всех сессий из лички.
       const start_param = (tg as any)?.initDataUnsafe?.start_param
         ?? new URLSearchParams(window.location.search).get('src')
         ?? null;

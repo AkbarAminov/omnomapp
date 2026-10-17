@@ -1,24 +1,27 @@
-// Deno Edge Function. Ретеншн-эксперимент №1 (2026-10-17): раз в день пишет всем, кто включил
-// /remind в боте, «Уже выбрали что покушать?» со ссылкой в Mini App. Отдельная функция, а не
-// код внутри telegram-bot, потому что у неё другой триггер — не вебхук Telegram, а внешний cron.
+// Deno Edge Function. Раз в день пишет «Уже выбрали что покушать?» тем, кто сам включил
+// напоминание кнопкой в боте. Отдельная функция, а не код внутри telegram-bot, потому что
+// у неё другой триггер: не вебхук Telegram, а внешний cron.
+//
+// Шлёт ТОЛЬКО в личные чаты: выборка ограничена положительными chat_id (у групп и супергрупп
+// они отрицательные). Рассылок в группы нет вовсе, и подписок для групп бот не заводит.
 //
 // Деплой: supabase functions deploy send-reminders --no-verify-jwt
-// (--no-verify-jwt обязателен: вызывающая сторона — cron, не Supabase-пользователь с JWT;
+// (--no-verify-jwt обязателен: вызывающая сторона это cron, а не Supabase-пользователь с JWT;
 // авторизация своя, через заголовок ниже.)
 //
 // Триггер: Supabase Dashboard → Integrations → Cron (НЕ внутри Edge Functions), тип задания
 // «Supabase Edge Function», метод POST, заголовок `x-cron-secret: <CRON_SECRET>`.
-// Требует обоих расширений — pg_cron (хранит расписание в cron.job) и pg_net (сам HTTP-вызов);
+// Требует обоих расширений: pg_cron (хранит расписание в cron.job) и pg_net (сам HTTP-вызов),
 // оба ставятся кнопкой в дашборде, без них типы заданий с HTTP недоступны.
-// Расписание `45 7 * * *`: поле в дашборде всегда в GMT, то есть 07:45 UTC = 12:45 по Ташкенту
-// (UTC+5, без перехода на летнее время — пересчитывать дважды в год не придётся). Проверять
-// удобно по колонке Next run: она показана уже в местном поясе.
-// Timeout в форме по умолчанию 1000 мс — мало: рассылка идёт последовательно, по запросу к
-// Telegram на подписчика, поэтому поставлен 30000.
+// Расписание `0 8 * * *`: поле в дашборде всегда в GMT, то есть 08:00 UTC = 13:00 по Ташкенту
+// (Asia/Tashkent, UTC+5, без перехода на летнее время, пересчитывать дважды в год не придётся).
+// Проверять удобно по колонке Next run: она показана уже в местном поясе.
+// Timeout в форме по умолчанию 1000 мс, этого мало: рассылка идёт последовательно, по запросу
+// к Telegram на подписчика, поэтому поставлен 30000.
 //
-// Секреты: TELEGRAM_BOT_TOKEN (тот же бот), MINIAPP_URL, CRON_SECRET (свой, не из Telegram —
+// Секреты: TELEGRAM_BOT_TOKEN (тот же бот), MINIAPP_URL, CRON_SECRET (свой, не из Telegram,
 // проверяет, что вызов пришёл от настроенного cron, а не от кого попало).
-// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — инжектятся платформой.
+// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY инжектятся платформой.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.8';
 
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
@@ -32,42 +35,15 @@ const admin = createClient(
   { auth: { persistSession: false } },
 );
 
-// src=reminder уезжает в app_sessions.source (main.tsx читает ?src= из query) — так виден
-// реальный эффект эксперимента: сколько открытий Mini App пришло именно по напоминанию.
+// src=reminder уезжает в app_sessions.source (main.tsx читает ?src= из query), так виден
+// реальный эффект: сколько открытий Mini App пришло именно по напоминанию.
 function miniAppUrl(): string {
   return MINIAPP_URL + (MINIAPP_URL.includes('?') ? '&' : '?') + 'src=reminder';
 }
 
 const REMINDER_TEXT = 'Уже выбрали что покушать?';
-
-let cachedUsername = '';
-async function botUsername(): Promise<string> {
-  if (cachedUsername) return cachedUsername;
-  try {
-    const res = await fetch(`${TELEGRAM_API}/getMe`);
-    const body = await res.json();
-    cachedUsername = body?.result?.username ?? '';
-  } catch (e) {
-    console.error('[send-reminders] getMe failed:', (e as Error).message);
-  }
-  return cachedUsername;
-}
-
-// Отрицательный chat_id у Telegram означает группу или супергруппу. Разбираем именно по
-// знаку, а не по отдельной колонке с типом чата: web_app-кнопку в группу слать нельзя
-// (сообщение отклоняется целиком), а заводить ради этого новую миграцию — дороже, чем
-// опереться на документированное свойство идентификаторов.
-async function pickDishButton(chatId: number): Promise<Record<string, unknown>> {
-  if (chatId > 0) return { text: '📱 Подобрать блюдо', web_app: { url: miniAppUrl() } };
-  const username = await botUsername();
-  if (!username) return { text: '📱 Подобрать блюдо', url: miniAppUrl() };
-  // Прямая ссылка открывает Mini App прямо в группе, но существует только с коротким именем
-  // приложения (@BotFather → /newapp, секрет MINIAPP_SHORTNAME). Без него — ссылка в личку.
-  const shortname = Deno.env.get('MINIAPP_SHORTNAME');
-  return shortname
-    ? { text: '📱 Подобрать блюдо', url: `https://t.me/${username}/${shortname}?startapp=reminder` }
-    : { text: '📱 Подобрать блюдо', url: `https://t.me/${username}?start=reminder` };
-}
+// Только личка, поэтому кнопка всегда web_app: в группы рассылки нет по условию.
+const PICK_DISH_BTN = { text: '🍽 Подобрать блюдо', web_app: { url: miniAppUrl() } };
 
 // true = доставлено, false = бот заблокирован (отписать), null = временная ошибка (попробовать завтра).
 async function sendReminder(chatId: number): Promise<boolean | null> {
@@ -78,7 +54,7 @@ async function sendReminder(chatId: number): Promise<boolean | null> {
       body: JSON.stringify({
         chat_id: chatId,
         text: REMINDER_TEXT,
-        reply_markup: { inline_keyboard: [[await pickDishButton(chatId)]] },
+        reply_markup: { inline_keyboard: [[PICK_DISH_BTN]] },
       }),
     });
     if (res.ok) return true;
@@ -101,10 +77,14 @@ Deno.serve(async (req) => {
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
 
+  // gt('chat_id', 0) это и есть «только личные чаты»: у групп и супергрупп Telegram выдаёт
+  // отрицательные идентификаторы. Страховка на случай, если строка группы всё же окажется
+  // в таблице (например, осталась от прежней версии бота).
   const { data: subs, error } = await admin
     .from('reminder_subscribers')
     .select('chat_id, last_reminded_at')
-    .eq('opted_in', true);
+    .eq('opted_in', true)
+    .gt('chat_id', 0);
   if (error) {
     console.error('[send-reminders] query failed:', error.message);
     return new Response('query failed', { status: 500 });

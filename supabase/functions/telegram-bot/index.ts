@@ -5,19 +5,25 @@
 // (--no-verify-jwt обязателен: вызывает только Telegram по вебхуку, у него нет Supabase JWT.)
 //
 // Секреты (supabase secrets set ...), значения не в коде и не в репозитории:
-//   TELEGRAM_BOT_TOKEN — тот же токен, что уже использует auth-telegram (один бот)
-//   WEBHOOK_SECRET      — секрет для заголовка X-Telegram-Bot-Api-Secret-Token
-//   ADMIN_CHAT_ID       — numeric chat_id, куда падает фидбэк и уведомления о донатах
-//   MINIAPP_URL         — https://omnomapp.vercel.app (или текущий прод-домен, без query)
-// Донаты Stars (/donate) новых секретов не требуют — currency 'XTR' не нужен provider_token.
-// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — инжектятся платформой, используются только для
-// scripts/sql/012_reminder_subscribers.sql (ретеншн-эксперимент №1: напоминание раз в день).
+//   TELEGRAM_BOT_TOKEN  тот же токен, что уже использует auth-telegram (один бот)
+//   WEBHOOK_SECRET      секрет для заголовка X-Telegram-Bot-Api-Secret-Token
+//   ADMIN_CHAT_ID       numeric chat_id, куда падает фидбэк и уведомления о донатах
+//   MINIAPP_URL         https://omnomapp.vercel.app (или текущий прод-домен, без query)
+//   BOT_USERNAME        Omnomfoodbot, без @
+//   APP_SHORTNAME       start, короткое имя Mini App из @BotFather
+// Последние два нужны только группам: web_app-кнопки там запрещены, и открыть приложение
+// поверх группового чата умеет лишь прямая ссылка t.me/<bot>/<app>?startapp=...
+// Донаты Stars (/donate) новых секретов не требуют: currency 'XTR' не нужен provider_token.
+// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY инжектятся платформой, нужны для таблицы
+// подписок на напоминание (scripts/sql/012_reminder_subscribers.sql).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.8';
 
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET')!;
 const ADMIN_CHAT_ID = Number(Deno.env.get('ADMIN_CHAT_ID'));
 const MINIAPP_URL = Deno.env.get('MINIAPP_URL')!;
+const BOT_USERNAME = Deno.env.get('BOT_USERNAME') ?? '';
+const APP_SHORTNAME = Deno.env.get('APP_SHORTNAME') ?? '';
 
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
@@ -27,85 +33,92 @@ const admin = createClient(
   { auth: { persistSession: false } },
 );
 
-// ── Тексты и клавиатуры — ровно как в ТЗ ───────────────────────────────────────
+// ── Тексты и клавиатуры ────────────────────────────────────────────────────────
+// Длинных тире в текстах бота намеренно нет: только запятые и точки.
+// В группе текст тот же, что в личке, разница только в наборе кнопок.
 const START_TEXT = 'Привет! Я OMNOM 🍽 Помогу решить, что поесть, за минуту. Жми кнопку ниже 👇';
-
-// Про напоминание предупреждаем сразу: оно включено по умолчанию, и человек должен узнать
-// про ежедневные сообщения здесь, а не из первого же сообщения в 12:45. Тем, кто уже
-// выключил, строку не показываем — она противоречила бы кнопке «🔔 Напоминать раз в день».
-const startText = (subscribed: boolean) =>
-  subscribed ? `${START_TEXT}\n\nРаз в день напомню про обед. Не нужно — выключи кнопкой 🔕 ниже.` : START_TEXT;
 
 const HELP_TEXT = `OMNOM подбирает блюдо под настроение.
 
 /start: открыть приложение
 /help: как это работает
+/stop: выключить напоминание про обед
 /feedback: написать автору
 /privacy: какие данные мы храним
 /donate: поддержать проект звёздами
-/remind: включить или выключить напоминание раз в день
 
 Свайпай карточки: Нет, Без разницы или Да. В конце получишь 3-5 блюд.`;
 
-// Текст обязан совпадать с тем, что код реально делает: chat_id теперь пишется при любом
-// обращении к боту, а не по кнопке, и при выключении напоминания строка не удаляется —
-// она остаётся с пометкой «не писать», иначе подписка по умолчанию вернула бы человека обратно.
+// Напоминание теперь строго по согласию, поэтому и текст другой: chat_id появляется в базе
+// только после нажатия кнопки, а не при обращении к боту.
 const PRIVACY_TEXT = `Что храним: обезличенный идентификатор, язык интерфейса, ответы в квизе и выбранные блюда.
-Ещё храним chat_id этого чата, чтобы раз в день присылать напоминание. Выключишь его (/remind) — chat_id останется, но только чтобы помнить, что писать тебе не нужно.
+Если включишь напоминание про обед, сохраним chat_id этого чата, чтобы бот мог написать. Выключишь через /stop, напоминать перестанем.
 Не храним: имя и username.
-Вопросы и удаление данных — через /feedback.`;
+Вопросы и удаление данных: через /feedback.`;
 
-const REMIND_ON_TEXT = 'Включил 🔔 Буду писать раз в день, около 12:45.';
-const REMIND_OFF_TEXT = 'Выключил 🔕 Больше не буду писать.';
+const REMIND_ON_TEXT = 'Готово, напомню в 13:00. Выключить: /stop';
+const REMIND_OFF_TEXT = 'Готово, больше не напомню. Включить обратно можно кнопкой в /start';
 const REMIND_FAILED_TEXT = 'Не получилось сохранить, попробуй ещё раз чуть позже 🙏';
-
-// В группе напоминание по умолчанию ВЫКЛЮЧЕНО, в отличие от лички: ежедневное сообщение в
-// общий чат, которого никто не просил, раздражает куда сильнее, чем в переписке один на один.
-const GROUP_TEXT = 'Привет! Помогу выбрать, что поесть 🍽 Жми кнопку — подберу блюдо.';
-const GROUP_REMIND_ON_TEXT = 'Включил 🔔 Буду спрашивать здесь про обед раз в день, около 12:45. Выключить — /remind.';
-const GROUP_REMIND_OFF_TEXT = 'Выключил 🔕 Больше не буду писать сюда.';
 
 const FEEDBACK_PROMPT = 'Напиши мне сообщение в ответ на это, я прочитаю';
 const FEEDBACK_BACK_HINT = 'Или вернись в меню:';
 const FEEDBACK_THANKS = 'Спасибо, передал ✅';
-const FALLBACK_TEXT = 'Не понял команду 🙂 Жми кнопку — подберу блюдо, или смотри /help.';
+const FALLBACK_TEXT = 'Не понял команду 🙂 Жми кнопку, подберу блюдо, или смотри /help.';
 
 // ── Донаты в Telegram Stars (XTR) ───────────────────────────────────────────────
-// Для Stars не нужен ни provider_token, ни отдельный платёжный провайдер — только
+// Для Stars не нужен ни provider_token, ни отдельный платёжный провайдер, только
 // currency: 'XTR' и сумма звёзд прямо в amount (без умножения на 100, как у фиатных валют).
-const DONATE_INTRO = 'Если нравится OMNOM — можно поддержать проект звёздами Telegram ⭐';
+const DONATE_INTRO = 'Если нравится OMNOM, можно поддержать проект звёздами Telegram ⭐';
 const DONATE_THANKS = 'Спасибо за поддержку! ⭐';
 const DONATE_AMOUNTS = [50, 100, 250, 500];
 
 // Метка источника уезжает в query Mini App, оттуда main.tsx кладёт её в app_sessions.source.
-// Аргумент /start (t.me/Omnomfoodbot?start=channel → «/start channel») пробрасывается сюда,
-// поэтому ссылку в канале достаточно опубликовать с ?start=<метка>, и приход будет виден.
+// Аргумент /start (t.me/Omnomfoodbot?start=channel то есть «/start channel») пробрасывается
+// сюда, поэтому ссылку в канале достаточно опубликовать с ?start=<метка>, и приход будет виден.
 // Пускаем только безопасные символы: метка уходит в URL и в базу.
-function miniAppUrl(source = 'bot'): string {
-  const safe = /^[a-zA-Z0-9_-]{1,32}$/.test(source) ? source : 'bot';
-  return MINIAPP_URL + (MINIAPP_URL.includes('?') ? '&' : '?') + `src=${safe}`;
+function safeSource(source = 'bot'): string {
+  return /^[a-zA-Z0-9_-]{1,32}$/.test(source) ? source : 'bot';
 }
 
-const pickDishBtn = (source?: string) => ({ text: '📱 Подобрать блюдо', web_app: { url: miniAppUrl(source) } });
-const PICK_DISH_BTN = pickDishBtn();
-const BACK_BTN = { text: '⬅️ Назад', callback_data: 'start' };
-const remindBtn = (subscribed: boolean) =>
-  ({ text: subscribed ? '🔕 Выключить напоминание' : '🔔 Напоминать раз в день', callback_data: subscribed ? 'remind_off' : 'remind_on' });
+function miniAppUrl(source = 'bot'): string {
+  return MINIAPP_URL + (MINIAPP_URL.includes('?') ? '&' : '?') + `src=${safeSource(source)}`;
+}
 
-const startKeyboard = (subscribed: boolean, source?: string) => ({
+// Личка: web_app, приложение открывается прямо в переписке.
+const pickDishBtn = (source?: string) => ({ text: '🍽 Подобрать блюдо', web_app: { url: miniAppUrl(source) } });
+const PICK_DISH_BTN = pickDishBtn();
+
+// Группа: web_app Telegram запрещает (сообщение с такой кнопкой отклоняется целиком), и
+// открыть приложение поверх группового чата умеет только прямая ссылка на Mini App.
+// startapp приезжает в приложение как initDataUnsafe.start_param, оттуда в source.
+const pickDishGroupBtn = () => ({
+  text: '🍽 Подобрать блюдо',
+  url: `https://t.me/${BOT_USERNAME}/${APP_SHORTNAME}?startapp=group`,
+});
+
+const BACK_BTN = { text: '⬅️ Назад', callback_data: 'start' };
+
+// Приветствие в личке: три кнопки. «Написать автору» и «Поддержать проект» переехали
+// в сообщение со списком команд, чтобы первый экран не был стеной из пяти кнопок.
+const startKeyboard = (source?: string) => ({
   inline_keyboard: [
     [pickDishBtn(source)],
-    [remindBtn(subscribed)],
-    [{ text: '💬 Посмотреть все команды', callback_data: 'cmds' }],
-    [{ text: '✉️ Написать автору', callback_data: 'feedback' }],
-    [{ text: '⭐ Поддержать проект', callback_data: 'donate' }],
+    [{ text: '🔔 Напоминать про обед', callback_data: 'remind_on' }],
+    [{ text: '💬 Все команды', callback_data: 'cmds' }],
   ],
 });
+// Приветствие в группе: ровно одна кнопка, ссылкой.
+const groupKeyboard = () => ({ inline_keyboard: [[pickDishGroupBtn()]] });
 const helpKeyboard = () => ({
-  inline_keyboard: [[PICK_DISH_BTN], [{ text: '✉️ Написать автору', callback_data: 'feedback' }], [BACK_BTN]],
+  inline_keyboard: [
+    [PICK_DISH_BTN],
+    [{ text: '✉️ Написать автору', callback_data: 'feedback' }],
+    [{ text: '⭐ Поддержать проект', callback_data: 'donate' }],
+    [BACK_BTN],
+  ],
 });
 const fallbackKeyboard = () => ({ inline_keyboard: [[PICK_DISH_BTN], [BACK_BTN]] });
-// Назад идёт отдельной кнопкой, а не в одной клавиатуре с запросом текста — у reply_markup
+// Назад идёт отдельной кнопкой, а не в одной клавиатуре с запросом текста: у reply_markup
 // может быть только один тип разом (ForceReply ИЛИ inline_keyboard, не оба), поэтому «Назад»
 // уходит отдельным сообщением рядом с force_reply, а не внутри него.
 const backOnlyKeyboard = () => ({ inline_keyboard: [[BACK_BTN]] });
@@ -168,22 +181,6 @@ async function tg(method: string, payload: Record<string, unknown>): Promise<voi
 const sendMessage = (chatId: number, text: string, reply_markup?: unknown) =>
   tg('sendMessage', { chat_id: chatId, text, reply_markup });
 
-// Username бота спрашиваем у самого Telegram, а не держим в секретах: он и так известен
-// токену, лишняя переменная окружения только разъехалась бы с реальностью при смене бота.
-// Нужен для групп: там вместо web_app-кнопки можно дать только обычную ссылку на бота.
-let cachedUsername = '';
-async function botUsername(): Promise<string> {
-  if (cachedUsername) return cachedUsername;
-  try {
-    const res = await fetch(`${TELEGRAM_API}/getMe`);
-    const body = await res.json();
-    cachedUsername = body?.result?.username ?? '';
-  } catch (e) {
-    console.error('[bot] getMe failed:', (e as Error).message);
-  }
-  return cachedUsername;
-}
-
 const answerCallbackQuery = (id: string, text?: string) =>
   tg('answerCallbackQuery', { callback_query_id: id, text });
 
@@ -214,69 +211,27 @@ const answerPreCheckoutQuery = (id: string, ok: boolean) =>
 const copyMessage = (toChatId: number, fromChatId: number, messageId: number) =>
   tg('copyMessage', { chat_id: toChatId, from_chat_id: fromChatId, message_id: messageId });
 
-// ── Напоминание раз в день (opt-in, scripts/sql/012) ───────────────────────────
-async function isSubscribed(chatId: number): Promise<boolean> {
-  const { data } = await admin.from('reminder_subscribers').select('opted_in').eq('chat_id', chatId).maybeSingle();
-  return data?.opted_in ?? false;
-}
-
-// Возвращает, доехала ли запись: тот же урок, что с saveSettings в settingsStorage.ts —
-// молча проглоченная ошибка означала бы «Включил 🔔» в ответ и ни одной подписки в базе.
+// ── Напоминание про обед (только по согласию, scripts/sql/012) ─────────────────
+// Строка в reminder_subscribers появляется ТОЛЬКО после явного нажатия кнопки или /stop.
+// Автоподписки нет: обращение к боту само по себе ничего не записывает.
+// Возвращает, доехала ли запись: тот же урок, что с saveSettings в settingsStorage.ts,
+// молча проглоченная ошибка означала бы «Готово, напомню в 13:00» и ни одной подписки в базе.
 async function setSubscribed(chatId: number, opted_in: boolean): Promise<boolean> {
   const { error } = await admin.from('reminder_subscribers').upsert({ chat_id: chatId, opted_in }, { onConflict: 'chat_id' });
   if (error) console.error('[bot] reminder_subscribers upsert failed:', error.message);
   return !error;
 }
 
-// Напоминание включено по умолчанию: строка создаётся при первом /start. ignoreDuplicates —
-// это ON CONFLICT DO NOTHING, и он здесь принципиален: обычный upsert вернул бы opted_in в
-// true тому, кто уже осознанно выключил напоминание, то есть подписывал бы его заново при
-// каждом заходе в меню.
-async function ensureSubscribed(chatId: number): Promise<void> {
-  const { error } = await admin
-    .from('reminder_subscribers')
-    .upsert({ chat_id: chatId, opted_in: true }, { onConflict: 'chat_id', ignoreDuplicates: true });
-  if (error) console.error('[bot] reminder_subscribers default-on failed:', error.message);
-}
-
 // ── Обработка одного апдейта ────────────────────────────────────────────────────
-// Ссылка для групп. Открыть Mini App прямо в групповом чате умеет только прямая ссылка вида
-// t.me/<bot>/<app>?startapp=… — web_app-кнопки группам недоступны в принципе. Такая ссылка
-// существует, лишь если приложению заведено короткое имя (@BotFather → /newapp) и оно
-// положено в секрет MINIAPP_SHORTNAME; пока его нет, остаётся ссылка в личку с ботом, и
-// человек уходит из группы в переписку. Метка source доезжает в обоих случаях: у прямой
-// ссылки через startapp → initDataUnsafe.start_param, у обычной — через ?start= и редирект.
-// Где читать env — роли не играет: окружение изолята фиксируется при его старте, поэтому
-// любой новый или изменённый секрет виден только после передеплоя, а не со следующего
-// запроса. На этом мы потеряли несколько кругов с CRON_SECRET.
-async function miniAppLink(source: string): Promise<string | null> {
-  const username = await botUsername();
-  if (!username) return null;
-  const shortname = Deno.env.get('MINIAPP_SHORTNAME');
-  return shortname
-    ? `https://t.me/${username}/${shortname}?startapp=${source}`
-    : `https://t.me/${username}?start=${source}`;
-}
-
-// Группа: отвечаем только на явные команды и только обычной ссылкой — web_app-кнопку
-// Telegram в группах не принимает, сообщение с ней не уходит вовсе. На прочие реплики не
-// реагируем: бот в общем чате, который комментирует каждое сообщение, выключают первым.
+// Группа: отвечаем только на явные команды и ровно одним коротким сообщением с одной
+// кнопкой. На прочие реплики не реагируем: бот в общем чате, который комментирует каждое
+// сообщение, выключают первым. Никаких подписок и рассылок в группы не заводим вовсе.
 async function handleGroupMessage(msg: TgMessage, chatId: number): Promise<void> {
   const text = (msg.text ?? '').trim();
   if (!text.startsWith('/')) return;
   const command = text.split(/[\s@]/)[0];
-
-  if (command === '/remind') {
-    const subscribed = await isSubscribed(chatId);
-    const ok = await setSubscribed(chatId, !subscribed);
-    const reply = !ok ? REMIND_FAILED_TEXT : subscribed ? GROUP_REMIND_OFF_TEXT : GROUP_REMIND_ON_TEXT;
-    await sendMessage(chatId, reply);
-    return;
-  }
   if (command === '/start' || command === '/help') {
-    const url = await miniAppLink('group');
-    const keyboard = url ? { inline_keyboard: [[{ text: '📱 Подобрать блюдо', url }]] } : undefined;
-    await sendMessage(chatId, GROUP_TEXT, keyboard);
+    await sendMessage(chatId, START_TEXT, groupKeyboard());
   }
 }
 
@@ -286,11 +241,8 @@ async function handleMessage(msg: TgMessage): Promise<void> {
     await handleGroupMessage(msg, chatId);
     return;
   }
-  // Записываем на любом касании бота, а не только на /start: иначе человек, открывший
-  // Mini App кнопкой из старого сообщения, так и остался бы неизвестным.
-  await ensureSubscribed(chatId);
 
-  // Оплата Stars прошла — admin уведомляется тем же способом, что и фидбэк, без БД.
+  // Оплата Stars прошла, admin уведомляется тем же способом, что и фидбэк, без БД.
   if (msg.successful_payment) {
     const amount = msg.successful_payment.total_amount;
     await sendMessage(chatId, DONATE_THANKS);
@@ -307,16 +259,19 @@ async function handleMessage(msg: TgMessage): Promise<void> {
   }
 
   const text = (msg.text ?? '').trim();
-  // В группах команды приходят как "/start@OmnomBot" — отрезаем @username и аргументы.
+  // Команды приходят и как "/start@OmnomBot", отрезаем @username и аргументы.
   const command = text.startsWith('/') ? text.split(/[\s@]/)[0] : '';
-  // «/start channel» — аргумент диплинка t.me/Omnomfoodbot?start=channel: это и есть метка
-  // источника, её надо донести до Mini App, иначе непонятно, откуда пришёл человек.
+  // «/start channel» это аргумент диплинка t.me/Omnomfoodbot?start=channel, то есть метка
+  // источника. Её надо донести до Mini App, иначе непонятно, откуда пришёл человек.
   const startArg = text.startsWith('/start') ? text.split(/\s+/)[1] : undefined;
 
   switch (command) {
-    case '/start': {
-      const subscribed = await isSubscribed(chatId);
-      await sendMessage(chatId, startText(subscribed), startKeyboard(subscribed, startArg));
+    case '/start':
+      await sendMessage(chatId, START_TEXT, startKeyboard(startArg));
+      return;
+    case '/stop': {
+      const ok = await setSubscribed(chatId, false);
+      await sendMessage(chatId, ok ? REMIND_OFF_TEXT : REMIND_FAILED_TEXT, backOnlyKeyboard());
       return;
     }
     case '/help':
@@ -334,32 +289,26 @@ async function handleMessage(msg: TgMessage): Promise<void> {
     case '/donate':
       await sendMessage(chatId, DONATE_INTRO, donateKeyboard());
       return;
-    case '/remind': {
-      const subscribed = await isSubscribed(chatId);
-      const ok = await setSubscribed(chatId, !subscribed);
-      const reply = !ok ? REMIND_FAILED_TEXT : subscribed ? REMIND_OFF_TEXT : REMIND_ON_TEXT;
-      await sendMessage(chatId, reply, backOnlyKeyboard());
-      return;
-    }
     default:
       await sendMessage(chatId, FALLBACK_TEXT, fallbackKeyboard());
   }
 }
 
 async function handleCallback(cb: TgCallbackQuery): Promise<void> {
-  // Обязательно и в первую очередь — иначе кнопка у пользователя «крутится» до таймаута.
+  // Обязательно и в первую очередь, иначе кнопка у пользователя «крутится» до таймаута.
   await answerCallbackQuery(cb.id);
   const chatId = cb.message?.chat.id;
   if (!chatId) return;
   // Все клавиатуры ниже содержат web_app-кнопку, которую в группу отправить нельзя. В группе
-  // у бота только ссылочные кнопки, без callback_data, поэтому сюда она попасть не должна —
+  // у бота только ссылочная кнопка, без callback_data, поэтому сюда она попасть не должна,
   // но если попадёт, лучше промолчать, чем слать сообщение, которое Telegram отклонит.
   if (cb.message?.chat.type !== 'private') return;
-  await ensureSubscribed(chatId);
 
   if (cb.data === 'start') {
-    const subscribed = await isSubscribed(chatId);
-    await sendMessage(chatId, startText(subscribed), startKeyboard(subscribed));
+    await sendMessage(chatId, START_TEXT, startKeyboard());
+  } else if (cb.data === 'remind_on') {
+    const ok = await setSubscribed(chatId, true);
+    await sendMessage(chatId, ok ? REMIND_ON_TEXT : REMIND_FAILED_TEXT, backOnlyKeyboard());
   } else if (cb.data === 'cmds') {
     await sendMessage(chatId, HELP_TEXT, helpKeyboard());
   } else if (cb.data === 'feedback') {
@@ -370,16 +319,11 @@ async function handleCallback(cb: TgCallbackQuery): Promise<void> {
   } else if (cb.data?.startsWith('donate_')) {
     const amount = Number(cb.data.slice('donate_'.length));
     if (Number.isInteger(amount) && amount > 0) await sendInvoice(chatId, amount);
-  } else if (cb.data === 'remind_on' || cb.data === 'remind_off') {
-    const subscribed = cb.data === 'remind_on';
-    const ok = await setSubscribed(chatId, subscribed);
-    const reply = !ok ? REMIND_FAILED_TEXT : subscribed ? REMIND_ON_TEXT : REMIND_OFF_TEXT;
-    await sendMessage(chatId, reply, backOnlyKeyboard());
   }
 }
 
 Deno.serve(async (req) => {
-  // Пустой GET — ручная проверка, что функция вообще поднята, без секрета.
+  // Пустой GET, ручная проверка, что функция вообще поднята, без секрета.
   if (req.method !== 'POST') return new Response('ok', { status: 200 });
 
   const secret = req.headers.get('X-Telegram-Bot-Api-Secret-Token');
