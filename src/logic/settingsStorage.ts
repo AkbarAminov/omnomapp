@@ -1,16 +1,20 @@
 import { supabase } from '../lib/supabase';
-import { getUserId } from '../lib/userId';
+import { getAuthUserId } from '../lib/auth';
 
 type Settings = { lang: string; allergens: string[] };
 
 let settingsPromise: Promise<Settings> | null = null;
 
+// RLS on user_settings checks auth.uid(): without a real session there is no user_id a
+// read/write could legally use, so this falls back to defaults rather than a client-trusted id.
 async function fetchSettings(): Promise<Settings> {
+  const userId = await getAuthUserId();
+  if (!userId) return { lang: 'ru', allergens: [] };
   try {
     const { data } = await supabase
       .from('user_settings')
       .select('lang, allergens')
-      .eq('user_id', getUserId())
+      .eq('user_id', userId)
       .maybeSingle();
     return { lang: data?.lang ?? 'ru', allergens: (data?.allergens as string[]) ?? [] };
   } catch {
@@ -27,9 +31,11 @@ export function loadSettings(): Promise<Settings> {
 // user_settings нельзя было понять — никто не сохранял настройки или запись молча падала.
 export async function saveSettings(lang: string, allergens: string[]): Promise<boolean> {
   settingsPromise = Promise.resolve({ lang, allergens });
+  const userId = await getAuthUserId();
+  if (!userId) return false;
   try {
     const { error } = await supabase.from('user_settings').upsert(
-      { user_id: getUserId(), lang, allergens, updated_at: new Date().toISOString() },
+      { user_id: userId, lang, allergens, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' }
     );
     if (error) {

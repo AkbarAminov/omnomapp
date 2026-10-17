@@ -32,6 +32,24 @@ function getInitData(): string | null {
   return (window as any).Telegram?.WebApp?.initData || null;
 }
 
+// Shared by every auth-scoped table (app_sessions/user_events via metrics.ts, history/
+// user_settings via historyStorage.ts/settingsStorage.ts): RLS on those tables checks
+// auth.uid(), so a write without a real session must no-op, not fall back to a client-trusted
+// id. Cached once found, but re-checked while null since initAuth() is an async round trip
+// that may not have resolved yet on an early call.
+let cachedUserId: string | null = null;
+
+export async function getAuthUserId(): Promise<string | null> {
+  if (cachedUserId) return cachedUserId;
+  try {
+    const { data } = await supabase.auth.getSession();
+    cachedUserId = data.session?.user.id ?? null;
+  } catch {
+    cachedUserId = null;
+  }
+  return cachedUserId;
+}
+
 // users/app_sessions/user_events не пишут ни строки, если initAuth ни разу не проходит —
 // и сам trackEvent() при этом молчит (нет профиля → no-op), так что без этой диагностики
 // причина никогда не всплывёт. events (эта функция) не требует auth.uid(), пишет всегда.

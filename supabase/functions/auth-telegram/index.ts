@@ -119,6 +119,17 @@ Deno.serve(async (req) => {
       if (insertErr) return json({ error: 'profile_create_failed' }, 500);
     }
 
+    // One-time-per-row backfill: history/user_settings predate real auth and are keyed by
+    // the raw Telegram id (what getUserId() used to return client-side pre-auth.uid()). This
+    // endpoint is the only place a signature-verified raw tg_id and its minted UUID are both
+    // known at once, so the migration happens here, on every login, rather than as a one-off
+    // offline script needing TG_HASH_SALT pulled out of band. Idempotent: after the first
+    // successful run no row still carries the raw id, so later logins match zero rows.
+    // Best-effort — must never block session issuance.
+    const rawTgId = String(tgUser.id);
+    await admin.from('history').update({ user_id: userId }).eq('user_id', rawTgId);
+    await admin.from('user_settings').update({ user_id: userId }).eq('user_id', rawTgId);
+
     const { data: link, error: linkErr } = await admin.auth.admin.generateLink({
       type: 'magiclink',
       email: syntheticEmail,

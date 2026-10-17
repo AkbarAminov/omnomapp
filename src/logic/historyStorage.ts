@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { getUserId } from '../lib/userId';
+import { getAuthUserId } from '../lib/auth';
 import type { Dish, Mode } from './engine';
 
 export type HistoryMode = Mode | 'random' | 'battle';
@@ -19,10 +19,14 @@ export function formatDate(d: Date): string {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`;
 }
 
+// RLS on history checks auth.uid(): without a real session there is no user_id a write
+// could legally carry, so this no-ops rather than falling back to a client-trusted id.
 export async function saveHistoryItem(dish: Dish, mode: HistoryMode, matchPercent: number | null): Promise<void> {
+  const userId = await getAuthUserId();
+  if (!userId) return;
   try {
     const { error } = await supabase.from('history').insert({
-      user_id: getUserId(),
+      user_id: userId,
       dish_id: dish.id,
       dish_name: dish.name,
       dish_image: dish.image,
@@ -36,16 +40,20 @@ export async function saveHistoryItem(dish: Dish, mode: HistoryMode, matchPercen
 }
 
 export async function clearHistory(): Promise<void> {
-  const { error } = await supabase.from('history').delete().eq('user_id', getUserId());
+  const userId = await getAuthUserId();
+  if (!userId) return;
+  const { error } = await supabase.from('history').delete().eq('user_id', userId);
   if (error) console.error('[OmNom] clearHistory error:', error);
 }
 
 export async function loadHistory(): Promise<HistoryItem[]> {
+  const userId = await getAuthUserId();
+  if (!userId) return [];
   try {
     const { data, error } = await supabase
       .from('history')
       .select('dish_id, dish_name, dish_image, match_percent, mode, created_at')
-      .eq('user_id', getUserId())
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(50);
     if (error || !data) return [];

@@ -3,17 +3,13 @@
 // here needs a real auth.uid() (see src/lib/auth.ts); with no profile, trackEvent is a no-op —
 // matches the "outside Telegram / no signature → no profile, no analytics" rule.
 import { supabase } from '../lib/supabase';
+import { getAuthUserId } from '../lib/auth';
 import { ALGORITHM_VERSION } from './engine';
 
 const FLUSH_MS = 3000;
 const MAX_QUEUE = 40;
 
 const sessionId = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-
-// Cached once found, but re-checked on every call while null — initAuth() is an async
-// network round trip, so an early trackEvent() (e.g. a fast tap on the start screen) must
-// not permanently decide "no profile" before auth has had a chance to finish.
-let userId: string | null = null;
 
 type EventRow = {
   session_id: string;
@@ -26,19 +22,8 @@ type EventRow = {
 let queue: EventRow[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-async function resolveUserId(): Promise<string | null> {
-  if (userId) return userId;
-  try {
-    const { data } = await supabase.auth.getSession();
-    userId = data.session?.user.id ?? null;
-  } catch {
-    userId = null;
-  }
-  return userId;
-}
-
 export function trackEvent(eventName: string, properties: Record<string, unknown> = {}): void {
-  void resolveUserId().then((uid) => {
+  void getAuthUserId().then((uid) => {
     if (!uid) return;
     queue.push({ session_id: sessionId, user_id: uid, event_name: eventName, properties, app_version: ALGORITHM_VERSION });
     if (queue.length >= MAX_QUEUE) flush();
@@ -73,7 +58,7 @@ export function flush(): void {
 // Called once at startup (src/main.tsx), after auth has had a chance to resolve. Opens the
 // one app_sessions row for this visit and fires app_open. No-op without a profile.
 export async function startAppSession(source: string | null, platform: string | null): Promise<void> {
-  const uid = await resolveUserId();
+  const uid = await getAuthUserId();
   if (!uid) return;
   try {
     await supabase.from('app_sessions').insert({
