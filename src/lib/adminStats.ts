@@ -138,16 +138,26 @@ export function formatNumber(n: number | null | undefined): string {
     : rounded.toFixed(1).replace('.', ',');
 }
 
+// Метрики, которые сами измеряются в процентах. Относительный прирост для них врёт:
+// рост завершаемости с 50% до 93.6% — это +43.6 процентных пункта, а не «+87%», как
+// получалось раньше. Для них считаем разницу в пунктах.
+const POINT_METRICS = new Set(['completion_pct']);
+
+export type Trend = { value: number; kind: 'relative' | 'points' };
+
 // Прирост к предыдущему периоду. Возвращает null, когда сравнивать не с чем: у «Всего
 // времени» предыдущего периода нет, а делить на нулевую базу — значит показать рост на
-// бесконечность там, где просто не было данных.
+// бесконечность там, где просто не было данных. У метрик в пунктах нулевая база не мешает:
+// с 0% до 50% — это честные +50 п.п.
 export function delta(
   current: KpiRow[] | null | undefined,
   prev: KpiRow[] | null | undefined,
   metric: string,
-): { pct: number; absolute: number } | null {
+): Trend | null {
   const now = kpiValue(current, metric);
   const before = kpiValue(prev, metric);
-  if (now === null || before === null || before === 0) return null;
-  return { pct: ((now - before) / before) * 100, absolute: now - before };
+  if (now === null || before === null) return null;
+  if (POINT_METRICS.has(metric)) return { value: now - before, kind: 'points' };
+  if (before === 0) return null;
+  return { value: ((now - before) / before) * 100, kind: 'relative' };
 }

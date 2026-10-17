@@ -16,7 +16,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   PERIOD_LABELS, cachedStats, delta, fetchStats, formatNumber, kpi, kpiValue,
-  type AudienceRow, type DishRow, type StatsPayload, type StatsPeriod,
+  type AudienceRow, type DishRow, type StatsPayload, type StatsPeriod, type Trend,
 } from '../lib/adminStats';
 
 const INK = '#6C2912';
@@ -62,7 +62,7 @@ function Skeleton({ height = 14, width = '100%' }: { height?: number; width?: st
 
 function Tile({ label, value, unit, trend }: {
   label: string; value: string; unit?: string;
-  trend?: { pct: number; absolute: number } | null;
+  trend?: Trend | null;
 }) {
   return (
     <div style={{ ...card, padding: '12px 14px' }}>
@@ -80,8 +80,9 @@ function Tile({ label, value, unit, trend }: {
       <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: '11px', marginTop: 3, minHeight: 14 }}>
         {trend
           ? (
-            <span style={{ color: trend.absolute >= 0 ? GOOD : BAD }}>
-              {trend.absolute >= 0 ? '+' : '−'}{formatNumber(Math.abs(trend.pct))}% к прошлому периоду
+            <span style={{ color: trend.value >= 0 ? GOOD : BAD }}>
+              {trend.value >= 0 ? '+' : '−'}{formatNumber(Math.abs(trend.value))}
+              {trend.kind === 'points' ? ' п.п.' : '%'} к прошлому периоду
             </span>
           )
           : <span style={{ color: INK_SOFT }}>нет базы для сравнения</span>}
