@@ -195,6 +195,17 @@ async function setSubscribed(chatId: number, opted_in: boolean): Promise<boolean
   return !error;
 }
 
+// Напоминание включено по умолчанию: строка создаётся при первом /start. ignoreDuplicates —
+// это ON CONFLICT DO NOTHING, и он здесь принципиален: обычный upsert вернул бы opted_in в
+// true тому, кто уже осознанно выключил напоминание, то есть подписывал бы его заново при
+// каждом заходе в меню.
+async function ensureSubscribed(chatId: number): Promise<void> {
+  const { error } = await admin
+    .from('reminder_subscribers')
+    .upsert({ chat_id: chatId, opted_in: true }, { onConflict: 'chat_id', ignoreDuplicates: true });
+  if (error) console.error('[bot] reminder_subscribers default-on failed:', error.message);
+}
+
 // ── Обработка одного апдейта ────────────────────────────────────────────────────
 async function handleMessage(msg: TgMessage): Promise<void> {
   const chatId = msg.chat.id;
@@ -224,6 +235,7 @@ async function handleMessage(msg: TgMessage): Promise<void> {
 
   switch (command) {
     case '/start':
+      await ensureSubscribed(chatId);
       await sendMessage(chatId, START_TEXT, startKeyboard(await isSubscribed(chatId), startArg));
       return;
     case '/help':

@@ -471,9 +471,12 @@ export function StartScreen({ onStart, onRandomizer }: { onStart(): void; onRand
           </PressButton>
         </div>
 
-        <p style={{ fontSize: '13px', color: 'rgba(108,41,18,0.55)', fontFamily: 'Inter, sans-serif' }}>
+        {/* «Пара карточек · ИИ подберёт блюдо» снято до появления настоящего ИИ — обещать его
+            нечем, плюс на коротких экранах строка подрезалась. Ключ start_hint оставлен:
+            вернуть подпись — раскомментировать этот блок. */}
+        {/* <p style={{ fontSize: '13px', color: 'rgba(108,41,18,0.55)', fontFamily: 'Inter, sans-serif' }}>
           {t('start_hint')}
-        </p>
+        </p> */}
       </div>
     </Screen>
   );
